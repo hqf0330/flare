@@ -33,14 +33,13 @@ public abstract class BaseFlink extends BaseFlare {
 
         // 高优先级：配置文件
         PropUtils.load("flink");
-        PropUtils.load("fire");
+        PropUtils.load("flare");
         PropUtils.load(this.className);
         PropUtils.load(this.driverClass);
 
         if (com.bhcode.flare.common.util.FlareUtils.isLocalRunMode()) {
             this.loadConf();
             // TODO: 加载用户通用配置和任务配置
-            // PropUtils.load(FlareFrameworkConf.userCommonConf).loadJobConf(this.getClass().getName());
         }
 
         // 设置 Flink 相关属性
@@ -54,7 +53,7 @@ public abstract class BaseFlink extends BaseFlare {
         // 允许通过配置覆盖 appName
         String configAppName = com.bhcode.flare.flink.conf.FlareFlinkConf.getFlinkAppName();
         if (StringUtils.isNotBlank(configAppName)) {
-            this.appName = configAppName.trim();
+            this.setAppName(configAppName.trim());
         }
 
         com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().setAppName(this.appName);

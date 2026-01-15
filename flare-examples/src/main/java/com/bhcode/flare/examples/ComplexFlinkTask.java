@@ -34,7 +34,7 @@ import java.util.Objects;
  * 复杂示例：覆盖 Flare 当前主要能力（注解、配置、生命周期、连接器、执行配置）
  */
 @Config(
-        files = {"flink", "flink-streaming", "fire"},
+        files = {"flink", "flink-streaming", "flare"},
         props = {
                 "flink.appName=complex-flink-task-from-config",
                 "flink.default.parallelism=3",
@@ -144,7 +144,7 @@ public class ComplexFlinkTask extends FlinkStreaming {
         if (useKafka) {
             return this.kafkaSourceFromConf(1);
         }
-        StreamExecutionEnvironment env = this.fire();
+        StreamExecutionEnvironment env = this.getEnv();
         List<String> data = Arrays.asList("flare", "complex", "task", "demo");
         return env.fromCollection(data).name("collection-source");
     }

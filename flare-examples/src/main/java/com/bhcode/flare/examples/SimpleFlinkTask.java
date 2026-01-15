@@ -45,11 +45,11 @@ public class SimpleFlinkTask extends FlinkStreaming {
     public void process() {
         log.info("=== Simple Flink Task Started ===");
         
-        // 使用 fire 对象获取 Flink 环境（与 Fire 框架保持一致）
-        StreamExecutionEnvironment fire = this.fire();
+        // 使用 env 资源
+        StreamExecutionEnvironment env = this.getEnv();
         
         // 创建一个简单的数据流
-        DataStreamSource<String> source = fire.fromCollection(
+        DataStreamSource<String> source = env.fromCollection(
                 Arrays.asList("Hello", "World", "Flink", "Flare")
         );
         

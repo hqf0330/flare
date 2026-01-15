@@ -1,6 +1,7 @@
 package com.bhcode.flare.flink.util;
 
 import com.bhcode.flare.flink.acc.MultiCounterAccumulator;
+import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.metrics.Counter;
 
@@ -14,6 +15,7 @@ public class MetricUtils {
      * @param name Counter name
      * @param count Increment value
      */
+    @SuppressWarnings("unchecked")
     public static void counter(RuntimeContext ctx, String name, long count) {
         if (ctx == null || name == null) return;
 
@@ -22,8 +24,12 @@ public class MetricUtils {
         metricCounter.inc(count);
 
         // 2. Flink Accumulator (Cumulative, visible after job finishes or in WebUI)
-        MultiCounterAccumulator acc = ctx.getAccumulator(FLARE_MULTI_ACC);
-        if (acc == null) {
+        Accumulator rawAcc = ctx.getAccumulator(FLARE_MULTI_ACC);
+        MultiCounterAccumulator acc;
+        
+        if (rawAcc instanceof MultiCounterAccumulator) {
+            acc = (MultiCounterAccumulator) rawAcc;
+        } else {
             acc = new MultiCounterAccumulator();
             ctx.addAccumulator(FLARE_MULTI_ACC, acc);
         }

@@ -2,7 +2,7 @@ package com.bhcode.flare.connector.kafka;
 
 import com.bhcode.flare.common.lineage.LineageManager;
 import com.bhcode.flare.common.util.PropUtils;
-import com.bhcode.flare.flink.util.JsonDeserializationSchema;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+@Slf4j
 public final class KafkaConnector {
 
     private KafkaConnector() {
@@ -80,7 +81,7 @@ public final class KafkaConnector {
         if (clazz == String.class) {
             deserializer = (DeserializationSchema<T>) new SimpleStringSchema();
         } else {
-            deserializer = new JsonDeserializationSchema<>(clazz);
+            deserializer = new FlareJsonDeserializationSchema<>(clazz);
         }
 
         KafkaSource<T> source = KafkaSource.<T>builder()

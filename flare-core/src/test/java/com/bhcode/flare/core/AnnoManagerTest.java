@@ -62,6 +62,11 @@ public class AnnoManagerTest {
             // 测试用
         }
 
+        @Override
+        public void counter(String name, long count) {
+            // 测试用
+        }
+
         @Process("测试方法1")
         public void testProcess1() {
             processCalled = true;
@@ -110,6 +115,11 @@ public class AnnoManagerTest {
 
         @Override
         public void stop() {
+            // 测试用
+        }
+
+        @Override
+        public void counter(String name, long count) {
             // 测试用
         }
 
@@ -180,6 +190,11 @@ public class AnnoManagerTest {
 
         @Override
         public void stop() {
+            // 测试用
+        }
+
+        @Override
+        public void counter(String name, long count) {
             // 测试用
         }
 

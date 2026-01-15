@@ -1,7 +1,6 @@
 package com.bhcode.flare.flink.acc;
 
 import org.apache.flink.api.common.accumulators.Accumulator;
-import org.apache.flink.api.common.accumulators.SimpleAccumulator;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -10,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Custom Multi-Counter Accumulator for Flink.
  */
-public class MultiCounterAccumulator implements SimpleAccumulator<Map<String, Long>> {
+public class MultiCounterAccumulator implements Accumulator<Map<String, Long>, HashMap<String, Long>> {
     private final Map<String, Long> multiCounter = new ConcurrentHashMap<>();
 
     @Override
@@ -27,8 +26,8 @@ public class MultiCounterAccumulator implements SimpleAccumulator<Map<String, Lo
     }
 
     @Override
-    public Map<String, Long> getLocalValue() {
-        return this.multiCounter;
+    public HashMap<String, Long> getLocalValue() {
+        return new HashMap<>(this.multiCounter);
     }
 
     @Override
@@ -37,14 +36,14 @@ public class MultiCounterAccumulator implements SimpleAccumulator<Map<String, Lo
     }
 
     @Override
-    public void merge(Accumulator<Map<String, Long>, Map<String, Long>> other) {
+    public void merge(Accumulator<Map<String, Long>, HashMap<String, Long>> other) {
         if (other != null) {
             this.add(other.getLocalValue());
         }
     }
 
     @Override
-    public Accumulator<Map<String, Long>, Map<String, Long>> clone() {
+    public Accumulator<Map<String, Long>, HashMap<String, Long>> clone() {
         MultiCounterAccumulator clone = new MultiCounterAccumulator();
         clone.add(new HashMap<>(this.multiCounter));
         return clone;

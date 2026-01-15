@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 
 import java.lang.reflect.Method;
 import java.net.InetAddress;
@@ -274,14 +275,15 @@ public class FlinkUtils {
      */
     public static <T> DataStream<T> uname(
             DataStream<T> stream, String uid, String name) {
-        if (stream != null) {
+        if (stream instanceof SingleOutputStreamOperator) {
+            SingleOutputStreamOperator<T> operator = (SingleOutputStreamOperator<T>) stream;
             if (uid != null && !uid.trim().isEmpty()) {
-                stream.uid(uid.trim());
+                operator.uid(uid.trim());
             }
             if (name != null && !name.trim().isEmpty()) {
-                stream.name(name.trim());
+                operator.name(name.trim());
             } else if (uid != null && !uid.trim().isEmpty()) {
-                stream.name(uid.trim());
+                operator.name(uid.trim());
             }
         }
         return stream;

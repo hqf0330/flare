@@ -14,7 +14,8 @@ import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.CheckpointingMode;
-import DataStream;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.EnvironmentSettings;
@@ -33,13 +34,7 @@ public abstract class FlinkStreaming extends BaseFlink {
     protected StreamExecutionEnvironment env;
     protected StreamTableEnvironment tableEnv;
     
-    // fire 对象：StreamExecutionEnvironment 的别名，提供统一访问入口（与 Fire 框架保持一致）
-    protected StreamExecutionEnvironment fire;
-    
-    // streamTableEnv 别名：与 Fire 框架保持一致
-    protected StreamTableEnvironment streamTableEnv;
-    
-    // 用于存放延期的数据（与 Fire 框架保持一致）
+    // 用于存放延期的数据
     // TODO: 如果需要使用，可以创建：new OutputTag<Type>("later_data")
 
     /**
@@ -110,7 +105,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         this.env.setRuntimeMode(runtimeMode);
         
         // 设置全局参数
-        this.env.getConfig().setGlobalJobParameters(ParameterTool.fromMap(finalConf.toMap()));
+        this.env.getConfig().setGlobalJobParameters(org.apache.flink.api.java.utils.ParameterTool.fromMap(finalConf.toMap()));
         
         // 从配置文件读取 operatorChainingEnable
         if (!FlareFlinkConf.isOperatorChainingEnable()) {
@@ -118,11 +113,8 @@ public abstract class FlinkStreaming extends BaseFlink {
             log.debug("Operator chaining disabled from config");
         }
         
-        // 配置解析和应用（解析配置文件中的 Flink 参数）
+        // 配置解析 and 应用（解析配置文件中的 Flink 参数）
         this.configParse(this.env);
-        
-        // 设置 fire 别名（统一访问入口）
-        this.fire = this.env;
         
         // 创建 TableEnvironment（可选，默认为关闭，避免引入 Table Planner 依赖）
         if (FlareFlinkConf.isTableEnvEnable()) {
@@ -138,37 +130,16 @@ public abstract class FlinkStreaming extends BaseFlink {
                     builder.inStreamingMode().build()
                 );
             }
-            
-            // 设置 streamTableEnv 别名（与 Fire 框架保持一致）
-            this.streamTableEnv = this.tableEnv;
         } else {
             log.info("TableEnvironment is disabled by config: {}", FlareFlinkConf.FLINK_TABLE_ENV_ENABLE);
             this.tableEnv = null;
-            this.streamTableEnv = null;
         }
-        
-        // TODO: 注册 Hive Catalog（如果配置了）
-        // if (StringUtils.isNotBlank(FlareHiveConf.getMetastoreUrl())) {
-        //     this.tableEnv.registerCatalog(FlareHiveConf.hiveCatalogName, this.hiveCatalog);
-        // }
         
         // 保存到单例工厂
         com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance()
                 .setStreamEnv(this.env)
                 .setTableEnv(this.tableEnv)
                 .setAppName(this.appName);
-        
-        // TODO: 加载 UDF JAR
-        // FlinkUtils.loadUdfJar();
-        
-        // TODO: 自动注册配置文件中指定的 UDF 函数
-        // if (FlareFlinkConf.flinkUdfEnable) {
-        //     FlareFlinkConf.flinkUdfList.forEach(udf -> {
-        //         log.info("Register UDF function [{}] with class [{}]", udf.getKey(), udf.getValue());
-        //         this.tableEnv.createTemporarySystemFunction(udf.getKey(), 
-        //             Class.forName(udf.getValue()).asSubclass(ScalarFunction.class));
-        //     });
-        // }
         
         log.info("Flink StreamExecutionEnvironment initialized");
     }
@@ -205,9 +176,6 @@ public abstract class FlinkStreaming extends BaseFlink {
     
     /**
      * 在加载任务配置文件前将被加载
-     * <p>
-     * 与 Fire 框架保持一致：加载 Flink Streaming 配置文件
-     * </p>
      */
     @Override
     protected void loadConf() {
@@ -220,23 +188,18 @@ public abstract class FlinkStreaming extends BaseFlink {
      * 初始化运行信息
      * <p>
      * 链路：init -> processAll -> start
-     * <p>
-     * 与 Fire 框架保持一致：调用 init 后会自动启动任务
-     * </p>
      *
      * @param conf 配置信息
      * @param args main方法参数
      */
     @Override
     public void init(Object conf, String[] args) {
-        // 设置任务类型
-        com.bhcode.flare.common.util.FlareUtils.setJobType(JobType.FLINK_STREAMING);
         // 应用连接器注解配置（Kafka/JDBC）
         FlinkConnectors.applyConnectorAnnotations(this.getClass());
         super.init(conf, args);
         this.processAll();
         
-        // 自动启动任务（与 Fire 框架保持一致，可通过配置关闭）
+        // 自动启动任务（可通过配置关闭）
         if (FlareFlinkConf.isJobAutoStart()) {
             this.start();
         } else {
@@ -323,17 +286,7 @@ public abstract class FlinkStreaming extends BaseFlink {
      */
     public <T> DataStream<T> uname(
             DataStream<T> stream, String uid, String name) {
-        if (stream != null) {
-            if (StringUtils.isNotBlank(uid)) {
-                stream.uid(uid.trim());
-            }
-            if (StringUtils.isNotBlank(name)) {
-                stream.name(name.trim());
-            } else if (StringUtils.isNotBlank(uid)) {
-                stream.name(uid.trim());
-            }
-        }
-        return stream;
+        return FlinkUtils.uname(stream, uid, name);
     }
 
     /**
@@ -341,17 +294,14 @@ public abstract class FlinkStreaming extends BaseFlink {
      */
     public <T> DataStream<T> repartition(
             DataStream<T> stream, int parallelism) {
-        if (stream != null && parallelism > 0) {
-            stream.setParallelism(parallelism);
+        if (stream instanceof SingleOutputStreamOperator && parallelism > 0) {
+            ((SingleOutputStreamOperator<T>) stream).setParallelism(parallelism);
         }
         return stream;
     }
 
     /**
      * 启动 Flink 任务
-     * <p>
-     * 与 Fire 框架保持一致：使用 fire 对象启动任务
-     * </p>
      */
     public void start() {
         start(this.resolveJobName());
@@ -367,11 +317,10 @@ public abstract class FlinkStreaming extends BaseFlink {
                 ? this.resolveJobName()
                 : jobName.trim();
         try {
-            StreamExecutionEnvironment env = this.fire();
-            if (env == null) {
+            if (this.env == null) {
                 throw new IllegalStateException("StreamExecutionEnvironment is not initialized");
             }
-            env.execute(finalJobName);
+            this.env.execute(finalJobName);
         } catch (Exception e) {
             log.error("Failed to start Flink job: {}", finalJobName, e);
             throw new RuntimeException("Failed to start Flink job", e);
@@ -415,23 +364,23 @@ public abstract class FlinkStreaming extends BaseFlink {
     }
 
     public <T> DataStream<T> kafkaSourceFromConf(Class<T> clazz, String topicOverride, int keyNum) {
-        return FlinkConnectors.kafkaSourceFromConf(this.fire(), clazz, topicOverride, keyNum);
+        return FlinkConnectors.kafkaSourceFromConf(this.env, clazz, topicOverride, keyNum);
     }
 
     public DataStream<String> kafkaSourceFromConf() {
-        return kafkaSourceFromConf(null, 1);
+        return kafkaSourceFromConf(String.class, null, 1);
     }
 
     public DataStream<String> kafkaSourceFromConf(String topicOverride) {
-        return kafkaSourceFromConf(topicOverride, 1);
+        return kafkaSourceFromConf(String.class, topicOverride, 1);
     }
 
     public DataStream<String> kafkaSourceFromConf(int keyNum) {
-        return kafkaSourceFromConf(null, keyNum);
+        return kafkaSourceFromConf(String.class, null, keyNum);
     }
 
     public DataStream<String> kafkaSourceFromConf(String topicOverride, int keyNum) {
-        return FlinkConnectors.kafkaSourceFromConf(this.fire(), topicOverride, keyNum);
+        return kafkaSourceFromConf(String.class, topicOverride, keyNum);
     }
 
     /**
@@ -450,18 +399,6 @@ public abstract class FlinkStreaming extends BaseFlink {
             BiConsumer<PreparedStatement, T> binder,
             int keyNum) {
         FlinkConnectors.jdbcSinkFromConf(stream, binder, keyNum);
-    }
-
-    /**
-     * 获取 Flink StreamExecutionEnvironment（统一访问入口）
-     * <p>
-     * 提供 fire 对象，与 Fire 框架保持一致
-     * </p>
-     *
-     * @return StreamExecutionEnvironment
-     */
-    public StreamExecutionEnvironment fire() {
-        return this.fire != null ? this.fire : this.env;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.bhcode.flare.connector.jdbc;
 
 import com.bhcode.flare.common.lineage.LineageManager;
 import com.bhcode.flare.common.util.PropUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.connector.jdbc.JdbcConnectionOptions;
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
 import org.apache.flink.connector.jdbc.JdbcSink;
@@ -12,6 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.function.BiConsumer;
 
+@Slf4j
 public final class JdbcConnector {
 
     private JdbcConnector() {

@@ -38,7 +38,7 @@ public abstract class BaseFlare {
     protected String[] args;
 
     // 当前任务的类型标识
-    protected final JobType jobType = JobType.UNDEFINED;
+    // protected final JobType jobType = JobType.UNDEFINED; 移除此字段，改用 getJobType()
 
     // 用于子类的锁状态判断，默认关闭状态
     protected final AtomicBoolean lock = new AtomicBoolean(false);
@@ -55,6 +55,11 @@ public abstract class BaseFlare {
     // 默认的任务名称为类名
     protected String appName = this.driverClass;
 
+    public void setAppName(String appName) {
+        this.appName = appName;
+        MDC.put("appName", appName);
+    }
+
     // 命令行参数工具
     protected ParameterTool parameter;
 
@@ -62,6 +67,7 @@ public abstract class BaseFlare {
      * 构造函数，自动调用 boot() 方法
      */
     protected BaseFlare() {
+        this.setAppName(this.driverClass); // 初始化 appName 并设置 MDC
         this.boot();
     }
 
@@ -70,8 +76,8 @@ public abstract class BaseFlare {
      * 注：该方法会同时在 driver 端与 executor 端执行
      */
     private void boot() {
-        // 设置日志上下文
-        this.setMdc();
+        // 注册 MDC
+        MDC.put("driverClass", this.driverClass);
 
         // 注册 JVM 关闭钩子，确保资源回收
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -83,21 +89,13 @@ public abstract class BaseFlare {
 
         // 显示启动画面
         FlareUtils.splash();
-
-        // TODO: 如果启用 Arthas，启动 Arthas（可选功能，延后实现）
-        // if (FlareFrameworkConf.arthasEnable) {
-        //     ArthasManager.startArthas(this.resourceId(), FlareFrameworkConf.arthasContainerEnable);
-        // }
-
-        // TODO: 配置日志级别（可选功能，延后实现）
-        // PropUtils.sliceKeys(FlareFrameworkConf.FLARE_LOG_LEVEL_CONF_PREFIX)
-        //     .forEach(kv -> Logger.getLogger(kv.getKey()).setLevel(Level.toLevel(kv.getValue())));
-
-        // TODO: 异常总线发送到MQ（可选功能，延后实现）
-        // ExceptionBus.sendToMQ();
-
         log.debug("Flare framework initialized");
     }
+
+    /**
+     * 获取任务类型
+     */
+    public abstract JobType getJobType();
 
     /**
      * SQL语法校验，如果语法错误，则返回错误堆栈
@@ -188,7 +186,7 @@ public abstract class BaseFlare {
         this.parseParameter(args);
         this.before(args);
         FlareUtils.setJobType(getJobType());
-        log.info("---> 完成用户资源初始化，任务类型：{} <---", this.jobType.getJobTypeDesc());
+        log.info("---> 完成用户资源初始化，任务类型：{} <---", getJobType().getJobTypeDesc());
         this.args = args;
         this.createContext(conf);
     }
@@ -291,8 +289,7 @@ public abstract class BaseFlare {
                 argAppName = this.parameter.get("jobName");
             }
             if (argAppName != null && !argAppName.trim().isEmpty()) {
-                this.appName = argAppName.trim();
-                this.setMdc();
+                this.setAppName(argAppName.trim());
                 log.info("appName set from args: {}", this.appName);
             }
         }

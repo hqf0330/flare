@@ -12,19 +12,17 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class PropUtils {
 
-    private static final Properties props = new Properties();
     private static final Map<String, String> settings = new ConcurrentHashMap<>();
-    private static final Map<String, String> alreadyLoadMap = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> alreadyLoadedFiles = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /**
      * 加载配置文件
      *
      * @param fileNames 配置文件名称（不需要 .properties 后缀）
-     * @return PropUtils 实例，支持链式调用
      */
-    public static PropUtils load(String... fileNames) {
+    public static void load(String... fileNames) {
         if (fileNames == null || fileNames.length == 0) {
-            return new PropUtils();
+            return;
         }
 
         for (String fileName : fileNames) {
@@ -35,21 +33,20 @@ public class PropUtils {
             String fullName = fileName.endsWith(".properties") ? fileName : fileName + ".properties";
 
             // 避免重复加载
-            if (alreadyLoadMap.containsKey(fullName)) {
+            if (!alreadyLoadedFiles.add(fullName)) {
                 continue;
             }
 
             try (InputStream is = PropUtils.class.getClassLoader().getResourceAsStream(fullName)) {
                 if (is != null) {
                     log.debug("Loading configuration file: {}", fullName);
+                    Properties props = new Properties();
                     props.load(is);
                     // 将配置信息存放到 settings 中
                     props.stringPropertyNames().forEach(key -> {
                         String value = props.getProperty(key);
                         settings.put(key, value);
                     });
-                    props.clear();
-                    alreadyLoadMap.put(fullName, fullName);
                     log.debug("Loaded configuration file: {}", fullName);
                 } else {
                     log.debug("Configuration file not found: {} (this is normal if using annotations)", fullName);
@@ -58,8 +55,6 @@ public class PropUtils {
                 log.warn("Failed to load configuration file: {}", fullName, e);
             }
         }
-
-        return new PropUtils();
     }
 
     /**

@@ -67,15 +67,15 @@ public class FlareUtils {
      */
     public static void splash() {
         if (!isSplash) {
-            String version = "1.0-SNAPSHOT"; // TODO: 从配置或 manifest 中读取版本号
+            String version = "1.0-SNAPSHOT";
             String info = String.format(
                     """
                             
                             ╔═══════════════════════════════════════════════════════════╗
                             ║                                                           ║
-                            ║                    ╦═╗╔═╗╔═╗╦ ╦╔═╗                       ║
-                            ║                    ╠╦╝║╣ ╠═╣║║║╚═╗                       ║
-                            ║                    ╩╚═╚═╝╩ ╩╚╩╝╚═╝                       ║
+                            ║   ╔═╗  ╦    ╔═╗  ╦═╗  ╔═╗                             ║
+                            ║   ╠╣   ║    ╠═╣  ╠╦╝  ║╣                              ║
+                            ║   ╚    ╩═╝  ╩ ╩  ╩╚═  ╚═╝                             ║
                             ║                                                           ║
                             ║              A lightweight Java framework                 ║
                             ║              for Flink stream processing                  ║
@@ -102,15 +102,21 @@ public class FlareUtils {
      */
     public static boolean isLocalRunMode() {
         // 1. 检查系统属性
-        String localEnv = System.getProperty("fire.env.local");
+        String localEnv = System.getProperty("flare.env.local");
         if (localEnv != null) {
             return Boolean.parseBoolean(localEnv);
         }
 
         // 2. 检查配置
-        String configLocal = PropUtils.getString("fire.env.local");
+        String configLocal = PropUtils.getString("flare.env.local");
         if (configLocal != null) {
             return Boolean.parseBoolean(configLocal);
+        }
+
+        // 兼容旧的 fire 配置（可选，建议逐步迁移）
+        String fireLocal = PropUtils.getString("fire.env.local");
+        if (fireLocal != null) {
+            return Boolean.parseBoolean(fireLocal);
         }
 
         // 3. 检查 master 参数

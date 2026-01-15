@@ -51,8 +51,8 @@ public class MultiStepFlinkTask extends FlinkStreaming {
     @Step1("创建数据源")
     public void createSource() {
         log.info("Step1: Creating data source");
-        StreamExecutionEnvironment fire = this.fire();
-        DataStreamSource<String> source = fire.fromCollection(
+        StreamExecutionEnvironment env = this.getEnv();
+        DataStreamSource<String> source = env.fromCollection(
                 Arrays.asList("Step1", "Step2", "Step3")
         );
         source.print("Step1-Output");
@@ -61,9 +61,9 @@ public class MultiStepFlinkTask extends FlinkStreaming {
     @Step2("数据转换")
     public void transformStep() {
         log.info("Step2: Transforming data");
-        // Step 方法中可以访问 fire() 等资源
-        StreamExecutionEnvironment fire = this.fire();
-        DataStreamSource<String> source = fire.fromCollection(
+        // Step 方法中可以访问 env 资源
+        StreamExecutionEnvironment env = this.getEnv();
+        DataStreamSource<String> source = env.fromCollection(
                 Arrays.asList("Transform1", "Transform2")
         );
         DataStream<String> transformed = source.map(s -> "Transformed: " + s);

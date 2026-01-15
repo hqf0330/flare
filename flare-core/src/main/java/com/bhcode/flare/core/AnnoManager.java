@@ -47,120 +47,11 @@ public class AnnoManager {
             return;
         }
 
-        try {
-            // 1. 先执行 @Process 注解的方法
-            invokeAnnoMethods(baseFlare, REGISTER_ANNO_METHODS);
-            
-            // 2. 再执行 @Step 注解的方法（按顺序）
-            invokeStepAnnoMethods(baseFlare);
-        } catch (Exception e) {
-            log.error("Failed to process annotation methods", e);
-            throw new RuntimeException("Failed to process annotation methods", e);
-        }
-    }
-
-    /**
-     * 按顺序调用 @Step 注解的方法
-     * <p>
-     * 执行顺序：Step1 -> Step2 -> Step3 -> Step4 -> Step5 -> Step6
-     * </p>
-     *
-     * @param baseFlare BaseFlare 实例
-     */
-    private static void invokeStepAnnoMethods(BaseFlare baseFlare) {
-        Class<?> clazz = baseFlare.getClass();
-        Method[] methods = clazz.getDeclaredMethods();
-
-        // 按 Step 注解类型分组
-        Map<Class<? extends Annotation>, List<Method>> stepMethodsMap = new HashMap<>();
-        for (Class<? extends Annotation> stepAnno : STEP_ANNO_METHODS) {
-            stepMethodsMap.put(stepAnno, new ArrayList<>());
-        }
-
-        // 收集所有带 Step 注解的方法
-        for (Method method : methods) {
-            for (Class<? extends Annotation> stepAnno : STEP_ANNO_METHODS) {
-                if (method.isAnnotationPresent(stepAnno)) {
-                    if (method.getParameterCount() == 0) {
-                        stepMethodsMap.get(stepAnno).add(method);
-                    } else {
-                        log.warn("Step method {} has parameters, skip invocation", method.getName());
-                    }
-                    break; // 一个方法只能有一个 Step 注解
-                }
-            }
-        }
-
-        // 按 Step 顺序执行
-        for (Class<? extends Annotation> stepAnno : STEP_ANNO_METHODS) {
-            List<Method> methodsToInvoke = stepMethodsMap.get(stepAnno);
-            if (methodsToInvoke.isEmpty()) {
-                continue;
-            }
-
-            // 同一 Step 内的多个方法按方法名排序
-            methodsToInvoke.sort(Comparator.comparing(Method::getName));
-
-            for (Method method : methodsToInvoke) {
-                Annotation annotation = null;
-                try {
-                    method.setAccessible(true);
-                    
-                    // 获取 Step 注解的描述信息
-                    annotation = method.getAnnotation(stepAnno);
-                    String stepName = stepAnno.getSimpleName();
-                    String description = getStepDescription(annotation, stepAnno);
-                    
-                    if (description != null && !description.isEmpty()) {
-                        log.info("Step {}. {} - {}", stepName, description, method.getName());
-                    } else {
-                        log.info("Step {}. {}", stepName, method.getName());
-                    }
-
-                    long startTime = System.currentTimeMillis();
-                    method.invoke(baseFlare);
-                    long elapsed = System.currentTimeMillis() - startTime;
-                    
-                    log.info("Step {} completed. Elapsed: {} ms", stepName, elapsed);
-                } catch (Exception e) {
-                    // 检查是否应该跳过错误
-                    boolean skipError = annotation != null ? getStepSkipError(annotation, stepAnno) : false;
-                    
-                    if (skipError) {
-                        log.warn("Step {} method {} failed but skipError=true, continue", 
-                                stepAnno.getSimpleName(), method.getName(), e);
-                    } else {
-                        log.error("Step {} method {} failed", stepAnno.getSimpleName(), method.getName(), e);
-                        throw new RuntimeException("Step " + stepAnno.getSimpleName() + 
-                                " method " + method.getName() + " failed", e);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 获取 Step 注解的描述信息
-     */
-    private static String getStepDescription(Annotation annotation, Class<? extends Annotation> stepAnno) {
-        try {
-            Method valueMethod = stepAnno.getMethod("value");
-            return (String) valueMethod.invoke(annotation);
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    /**
-     * 获取 Step 注解的 skipError 属性
-     */
-    private static boolean getStepSkipError(Annotation annotation, Class<? extends Annotation> stepAnno) {
-        try {
-            Method skipErrorMethod = stepAnno.getMethod("skipError");
-            return (Boolean) skipErrorMethod.invoke(annotation);
-        } catch (Exception e) {
-            return false;
-        }
+        // 1. 先执行 @Process 注解的方法
+        invokeAnnoMethods(baseFlare, REGISTER_ANNO_METHODS);
+        
+        // 2. 再执行 @Step 系列注解的方法（按 Step1 -> Step6 顺序）
+        invokeAnnoMethods(baseFlare, STEP_ANNO_METHODS);
     }
 
     /**
@@ -174,13 +65,7 @@ public class AnnoManager {
             log.warn("BaseFlare instance or annotation class is null, skip lifecycle annotation processing");
             return;
         }
-
-        try {
-            invokeAnnoMethods(baseFlare, Arrays.asList(annoClass));
-        } catch (Exception e) {
-            log.error("Failed to process lifecycle annotation: {}", annoClass.getName(), e);
-            throw new RuntimeException("Failed to process lifecycle annotation: " + annoClass.getName(), e);
-        }
+        invokeAnnoMethods(baseFlare, Arrays.asList(annoClass));
     }
 
     /**
@@ -193,15 +78,14 @@ public class AnnoManager {
         Class<?> clazz = baseFlare.getClass();
         Method[] methods = clazz.getDeclaredMethods();
 
-        // 按注解类型分组，并按方法名排序（保证执行顺序）
-        List<Method> methodsToInvoke = new ArrayList<>();
+        // 收集并排序待执行的方法
+        List<MethodWithAnno> methodsToInvoke = new ArrayList<>();
 
         for (Class<? extends Annotation> annoClass : annotationClasses) {
             for (Method method : methods) {
                 if (method.isAnnotationPresent(annoClass)) {
-                    // 检查方法签名：应该是无参或只有一个参数的方法
                     if (method.getParameterCount() == 0) {
-                        methodsToInvoke.add(method);
+                        methodsToInvoke.add(new MethodWithAnno(method, method.getAnnotation(annoClass)));
                     } else {
                         log.warn("Method {} has parameters, skip invocation", method.getName());
                     }
@@ -209,40 +93,64 @@ public class AnnoManager {
             }
         }
 
-        // 按方法名排序，保证执行顺序
-        methodsToInvoke.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
+        // 同一优先级的按方法名排序
+        methodsToInvoke.sort(Comparator.comparing(m -> m.method.getName()));
 
-        // 调用方法
-        for (Method method : methodsToInvoke) {
+        // 执行调用
+        for (MethodWithAnno entry : methodsToInvoke) {
+            Method method = entry.method;
+            Annotation annotation = entry.annotation;
+            String name = method.getName();
+            
             try {
                 method.setAccessible(true);
-                Annotation annotation = method.getAnnotation(Process.class);
-                if (annotation != null) {
-                    Process processAnno = (Process) annotation;
-                    String description = processAnno.value();
-                    if (description != null && !description.isEmpty()) {
-                        log.debug("Invoking @Process method: {} - {}", method.getName(), description);
-                    } else {
-                        log.debug("Invoking @Process method: {}", method.getName());
-                    }
-                } else {
-                    log.debug("Invoking annotated method: {}", method.getName());
+                
+                // 解析描述和错误跳过策略
+                String description = "";
+                boolean skipError = false;
+                
+                if (annotation instanceof Process p) {
+                    description = p.value();
+                    skipError = p.skipError();
+                } else if (annotation != null) {
+                    // 使用反射获取 Step 系列注解的通用属性（仅在此处反射一次）
+                    description = getAnnotationValue(annotation, "value", "");
+                    skipError = getAnnotationValue(annotation, "skipError", false);
                 }
 
-                method.invoke(baseFlare);
-                log.debug("Successfully invoked method: {}", method.getName());
-            } catch (Exception e) {
-                // 检查是否应该跳过错误
-                Process processAnno = method.getAnnotation(Process.class);
-                boolean skipError = processAnno != null && processAnno.skipError();
-
-                if (skipError) {
-                    log.warn("Failed to invoke method {} but skipError=true, continue", method.getName(), e);
+                if (!description.isEmpty()) {
+                    log.info("Invoking method: {} ({})", name, description);
                 } else {
-                    log.error("Failed to invoke method: {}", method.getName(), e);
-                    throw new RuntimeException("Failed to invoke method: " + method.getName(), e);
+                    log.info("Invoking method: {}", name);
+                }
+
+                long startTime = System.currentTimeMillis();
+                method.invoke(baseFlare);
+                log.debug("Method {} executed in {} ms", name, System.currentTimeMillis() - startTime);
+                
+            } catch (Exception e) {
+                boolean skipErrorFlag = false;
+                if (annotation instanceof Process p) skipErrorFlag = p.skipError();
+                else skipErrorFlag = getAnnotationValue(annotation, "skipError", false);
+
+                if (skipErrorFlag) {
+                    log.warn("Method {} failed but skipError=true, continuing...", name, e);
+                } else {
+                    log.error("Method {} failed", name, e);
+                    throw new RuntimeException("Execution failed for method: " + name, e);
                 }
             }
         }
     }
+
+    private static <T> T getAnnotationValue(Annotation anno, String methodName, T defaultValue) {
+        try {
+            Method method = anno.annotationType().getMethod(methodName);
+            return (T) method.invoke(anno);
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private static record MethodWithAnno(Method method, Annotation annotation) {}
 }
