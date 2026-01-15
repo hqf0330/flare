@@ -125,9 +125,6 @@ public abstract class BaseFlare {
 
     /**
      * SQL语法校验
-     * <p>
-     * 子类可以重写此方法以实现更严格的SQL校验
-     * </p>
      *
      * @param sql SQL语句
      * @return true：校验成功 false：校验失败

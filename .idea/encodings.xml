@@ -17,6 +17,8 @@
     <file url="file://$PROJECT_DIR$/flare-examples/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/flare-flink/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/flare-flink/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/flare-jobs/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/flare-jobs/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
   </component>

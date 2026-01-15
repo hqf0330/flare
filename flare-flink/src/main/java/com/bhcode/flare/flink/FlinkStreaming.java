@@ -2,15 +2,14 @@ package com.bhcode.flare.flink;
 
 import com.bhcode.flare.common.enums.JobType;
 import com.bhcode.flare.common.util.PropUtils;
+import com.bhcode.flare.connector.FlinkConnectors;
 import com.bhcode.flare.flink.anno.Streaming;
 import com.bhcode.flare.flink.conf.FlareFlinkConf;
-import com.bhcode.flare.connector.FlinkConnectors;
 import com.bhcode.flare.flink.util.FlinkSingletonFactory;
 import com.bhcode.flare.flink.util.FlinkUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.RuntimeExecutionMode;
-import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -342,15 +341,6 @@ public abstract class FlinkStreaming extends BaseFlink {
         return this.driverClass;
     }
 
-    // ----------------------------------------------------------------------
-    // Minimal Kafka / JDBC helpers for Flink JAR tasks
-    // ----------------------------------------------------------------------
-
-    /**
-     * Create Kafka source using properties:
-     * kafka.bootstrap.servers, kafka.topic, kafka.group.id, kafka.starting.offsets
-     * Optional extra props: kafka.props.*
-     */
     public <T> DataStream<T> kafkaSourceFromConf(Class<T> clazz) {
         return kafkaSourceFromConf(clazz, null, 1);
     }
@@ -383,11 +373,6 @@ public abstract class FlinkStreaming extends BaseFlink {
         return kafkaSourceFromConf(String.class, topicOverride, keyNum);
     }
 
-    /**
-     * JDBC sink using properties:
-     * jdbc.url, jdbc.user, jdbc.password, jdbc.driver, jdbc.sql
-     * Optional: jdbc.batch.size, jdbc.batch.interval.ms, jdbc.max.retries
-     */
     public <T> void jdbcSinkFromConf(
             DataStream<T> stream,
             BiConsumer<PreparedStatement, T> binder) {

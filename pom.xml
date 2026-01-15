@@ -38,7 +38,8 @@
         <rocketmq.version>5.1.4</rocketmq.version>
         <kafka.version>3.6.1</kafka.version>
         <hadoop.version>3.3.6</hadoop.version>
-        <maven.scope>provided</maven.scope>
+        <!-- 核心优化：开发阶段设为 compile，支持依赖传递，让业务模块开箱即用 -->
+        <maven.scope>compile</maven.scope>
     </properties>
 
 </project>

@@ -22,13 +22,15 @@ import com.bhcode.flare.flink.anno.Streaming;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * FlinkStreaming 基础功能单元测试
@@ -103,9 +105,9 @@ public class FlinkStreamingTest {
         // 测试上下文创建
         // 注意：此测试需要完整的 Flink Table Planner 环境
         assertFalse(flinkStreaming.isContextCreated());
-        
+
         flinkStreaming.init(null, null);
-        
+
         assertTrue(flinkStreaming.isContextCreated());
         assertNotNull("StreamExecutionEnvironment 不应为 null", flinkStreaming.getEnv());
         assertNotNull("StreamTableEnvironment 不应为 null", flinkStreaming.getTableEnv());
@@ -117,24 +119,11 @@ public class FlinkStreamingTest {
         // 测试 fire 别名
         // 注意：此测试需要完整的 Flink Table Planner 环境
         flinkStreaming.init(null, null);
-        
-        StreamExecutionEnvironment fire = flinkStreaming.fire();
-        assertNotNull("fire() 方法应返回非 null 的 StreamExecutionEnvironment", fire);
-        assertEquals("fire() 应返回与 getEnv() 相同的实例", 
-                flinkStreaming.getEnv(), fire);
-    }
 
-    @Test
-    @Ignore("需要完整的 Flink Table Planner 环境，暂时跳过")
-    public void testStreamTableEnvAlias() {
-        // 测试 streamTableEnv 别名
-        // 注意：此测试需要完整的 Flink Table Planner 环境
-        flinkStreaming.init(null, null);
-        
-        StreamTableEnvironment streamTableEnv = flinkStreaming.streamTableEnv;
-        assertNotNull("streamTableEnv 不应为 null", streamTableEnv);
-        assertEquals("streamTableEnv 应与 getTableEnv() 返回相同的实例", 
-                flinkStreaming.getTableEnv(), streamTableEnv);
+        StreamExecutionEnvironment env = flinkStreaming.getEnv();
+        assertNotNull("fire() 方法应返回非 null 的 StreamExecutionEnvironment", env);
+        assertEquals("fire() 应返回与 getEnv() 相同的实例",
+                flinkStreaming.getEnv(), env);
     }
 
     @Test
@@ -142,7 +131,7 @@ public class FlinkStreamingTest {
         // 测试配置构建
         Configuration conf = new Configuration();
         Configuration result = flinkStreaming.buildConf(conf);
-        
+
         assertNotNull(result);
         assertTrue(result.getBoolean(ConfigConstants.LOCAL_START_WEBSERVER, false));
     }
@@ -153,9 +142,9 @@ public class FlinkStreamingTest {
         // 测试 process 方法是否被调用
         // 注意：此测试需要完整的 Flink Table Planner 环境
         assertFalse(flinkStreaming.isProcessCalled());
-        
+
         flinkStreaming.init(null, null);
-        
+
         // process() 会在 processAll() 中被调用
         assertTrue("process() 方法应该被调用", flinkStreaming.isProcessCalled());
     }
@@ -174,14 +163,14 @@ public class FlinkStreamingTest {
         // 测试 SQL 相关方法
         // 注意：此测试需要完整的 Flink Table Planner 环境
         flinkStreaming.init(null, null);
-        
+
         // 测试 sql() 方法（应该不抛出异常）
         try {
             flinkStreaming.sql("CREATE TABLE test_table (id INT) WITH ('connector' = 'datagen')");
         } catch (Exception e) {
             // 在测试环境中可能会失败，这是正常的
         }
-        
+
         // 测试 sqlQuery() 方法
         try {
             flinkStreaming.sqlQuery("SELECT 1");

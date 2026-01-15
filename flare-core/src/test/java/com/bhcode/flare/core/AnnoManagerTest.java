@@ -17,6 +17,7 @@
 
 package com.bhcode.flare.core;
 
+import com.bhcode.flare.common.enums.JobType;
 import com.bhcode.flare.core.anno.connector.Process;
 import com.bhcode.flare.core.anno.connector.After;
 import com.bhcode.flare.core.anno.connector.Before;
@@ -41,6 +42,11 @@ public class AnnoManagerTest {
     static class TestProcessClass extends BaseFlare {
         private boolean processCalled = false;
         private boolean process2Called = false;
+
+        @Override
+        public JobType getJobType() {
+            return null;
+        }
 
         @Override
         protected String resourceId() {
@@ -97,6 +103,11 @@ public class AnnoManagerTest {
         private int step1Order = 0;
         private int step2Order = 0;
         private int step3Order = 0;
+
+        @Override
+        public JobType getJobType() {
+            return null;
+        }
 
         @Override
         protected String resourceId() {
@@ -172,6 +183,11 @@ public class AnnoManagerTest {
     static class TestLifecycleClass extends BaseFlare {
         private boolean beforeCalled = false;
         private boolean afterCalled = false;
+
+        @Override
+        public JobType getJobType() {
+            return null;
+        }
 
         @Override
         protected String resourceId() {
