@@ -1,0 +1,206 @@
+package com.bhcode.flare.flink;
+
+import com.bhcode.flare.common.anno.Config;
+import com.bhcode.flare.common.util.PropUtils;
+import com.bhcode.flare.core.BaseFlare;
+import com.bhcode.flare.flink.anno.Checkpoint;
+import com.bhcode.flare.flink.anno.State;
+import com.bhcode.flare.flink.anno.Streaming;
+import com.bhcode.flare.flink.conf.FlinkAnnoManager;
+import com.bhcode.flare.flink.util.FlinkUtils;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.flink.configuration.Configuration;
+
+import java.util.Optional;
+
+@Slf4j
+public abstract class BaseFlink extends BaseFlare {
+    
+    protected Configuration configuration;
+    
+    // TODO: Hive Catalog（可选功能，延后实现）
+    // protected HiveCatalog hiveCatalog;
+
+    /**
+     * Flink 特定的初始化方法
+     * 注：该方法在构造函数中自动调用，用于初始化 Flink 特定的配置
+     */
+    protected void initFlink() {
+        // 低优先级：@Config、@Streaming/@Checkpoint（配置文件将覆盖）
+        this.applyConfigAnnoProps();
+        this.applyAnnoProps();
+
+        // 高优先级：配置文件
+        PropUtils.load("flink");
+        PropUtils.load("fire");
+        PropUtils.load(this.className);
+        PropUtils.load(this.driverClass);
+
+        if (com.bhcode.flare.common.util.FlareUtils.isLocalRunMode()) {
+            this.loadConf();
+            // TODO: 加载用户通用配置和任务配置
+            // PropUtils.load(FlareFrameworkConf.userCommonConf).loadJobConf(this.getClass().getName());
+        }
+
+        // 设置 Flink 相关属性
+        PropUtils.setProperty(
+                com.bhcode.flare.flink.conf.FlareFlinkConf.FLINK_DRIVER_CLASS_NAME, 
+                this.className);
+        PropUtils.setProperty(
+                com.bhcode.flare.flink.conf.FlareFlinkConf.FLINK_CLIENT_SIMPLE_CLASS_NAME, 
+                this.driverClass);
+
+        // 允许通过配置覆盖 appName
+        String configAppName = com.bhcode.flare.flink.conf.FlareFlinkConf.getFlinkAppName();
+        if (StringUtils.isNotBlank(configAppName)) {
+            this.appName = configAppName.trim();
+        }
+
+        com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().setAppName(this.appName);
+
+        log.debug("BaseFlink initialization completed");
+    }
+    
+    /**
+     * 构造函数，自动调用 Flink 特定的初始化
+     */
+    protected BaseFlink() {
+        super(); // 调用父类构造函数，会自动调用父类的 boot() 方法
+        this.initFlink();
+    }
+
+    /**
+     * 构建或合并 Configuration
+     * 注：不同的子类需根据需要复写该方法
+     *
+     * @param conf 在 conf 基础上构建
+     * @return 合并后的 Configuration 对象
+     */
+    public abstract Configuration buildConf(Configuration conf);
+
+    /**
+     * 获取任务的 resourceId
+     *
+     * @return Flink任务：JobManager/container_xxx
+     */
+    @Override
+    protected String resourceId() {
+        return FlinkUtils.getResourceId();
+    }
+
+    /**
+     * SQL语法校验，如果语法错误，则返回错误堆栈
+     *
+     * @param sql SQL语句
+     * @return 校验结果，成功返回空，失败返回异常
+     */
+    @Override
+    public Optional<Exception> sqlValidate(String sql) {
+        return FlinkUtils.sqlValidate(sql);
+    }
+
+    /**
+     * SQL语法校验
+     *
+     * @param sql SQL语句
+     * @return true：校验成功 false：校验失败
+     */
+    @Override
+    public boolean sqlLegal(String sql) {
+        return FlinkUtils.sqlLegal(sql);
+    }
+
+    /**
+     * 生命周期方法：用于回收资源
+     */
+    @Override
+    public void stop() {
+        try {
+            this.after();
+        } finally {
+            this.shutdown();
+        }
+    }
+
+    /**
+     * 生命周期方法：进行 Flare 框架的资源回收
+     * 注：不允许子类覆盖
+     */
+    @Override
+    protected final void shutdown(boolean stopGracefully, boolean inListener) {
+        super.shutdown(stopGracefully, inListener);
+        // TODO: 如果配置了退出，则退出JVM
+        // if (FlareFrameworkConf.shutdownExit) {
+        //     FlareUtils.exitError();
+        // }
+    }
+
+    /**
+     * 将类上的 Flink 注解配置映射到配置项
+     */
+    private void applyAnnoProps() {
+        FlinkAnnoManager annoManager = new FlinkAnnoManager();
+        Streaming streaming = this.getClass().getAnnotation(Streaming.class);
+        if (streaming != null) {
+            annoManager.mapStreaming(streaming);
+        }
+        Checkpoint checkpoint = this.getClass().getAnnotation(Checkpoint.class);
+        if (checkpoint != null) {
+            annoManager.mapCheckpoint(checkpoint);
+        }
+        State state = this.getClass().getAnnotation(State.class);
+        if (state != null) {
+            annoManager.mapState(state);
+        }
+        annoManager.applyToPropUtils();
+    }
+
+    /**
+     * 将 @Config 注解的配置加载到 PropUtils（低优先级）
+     */
+    private void applyConfigAnnoProps() {
+        Config config = this.getClass().getAnnotation(Config.class);
+        if (config == null) {
+            return;
+        }
+        if (config.files() != null && config.files().length > 0) {
+            PropUtils.load(config.files());
+        }
+        if (config.props() != null) {
+            for (String prop : config.props()) {
+                applyKeyValue(prop);
+            }
+        }
+        if (StringUtils.isNotBlank(config.value())) {
+            String[] parts = config.value().split("[;\\n]");
+            for (String part : parts) {
+                applyKeyValue(part);
+            }
+        }
+    }
+
+    @Override
+    public void counter(String name, long count) {
+        if (StringUtils.isBlank(name)) return;
+        // 注意：此处的 counter 在分布式环境下仅在当前 JVM（TaskManager）生效
+        // 建议在算子内部使用 MetricUtils.counter(getRuntimeContext(), name, count)
+        log.debug("Local JVM Metric Counter [{}]: +{}", name, count);
+        com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().updateMetric(name, count);
+    }
+
+    private void applyKeyValue(String text) {
+        if (StringUtils.isBlank(text)) {
+            return;
+        }
+        String[] kv = text.split("=", 2);
+        if (kv.length != 2) {
+            return;
+        }
+        String key = kv[0].trim();
+        String value = kv[1].trim();
+        if (StringUtils.isNotBlank(key)) {
+            PropUtils.setProperty(key, value);
+        }
+    }
+}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.bhcode.flare</groupId>
+    <artifactId>flare</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>flare-common</module>
+        <module>flare-core</module>
+        <module>flare-dependencies</module>
+        <module>flare-connectors</module>
+        <module>flare-flink</module>
+        <module>flare-examples</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <lombok.version>1.18.42</lombok.version>
+        <flatten-maven-plugin.version>1.7.2</flatten-maven-plugin.version>
+        
+        <!-- Flink 版本 -->
+        <flink.version>1.19.1</flink.version>
+        <flink.major.version>1.19</flink.major.version>
+        <flink.jdbc.connector.version>3.2.0-${flink.major.version}</flink.jdbc.connector.version>
+        <flink.kafka.connector.version>3.2.0-${flink.major.version}</flink.kafka.connector.version>
+        
+        <!-- 其他依赖版本 -->
+        <slf4j.version>2.0.9</slf4j.version>
+        <sparkjava.version>2.9.4</sparkjava.version>
+        <hive.flink.version>3.1.3</hive.flink.version>
+        <hbase.version>2.5.0</hbase.version>
+        <rocketmq.version>5.1.4</rocketmq.version>
+        <kafka.version>3.6.1</kafka.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <maven.scope>provided</maven.scope>
+    </properties>
+
+</project>
