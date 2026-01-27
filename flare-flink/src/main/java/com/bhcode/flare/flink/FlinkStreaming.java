@@ -13,16 +13,20 @@ import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.AsyncDataStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.async.AsyncFunction;
+import org.apache.flink.util.OutputTag;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
 import java.sql.PreparedStatement;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import static org.apache.flink.streaming.api.environment.CheckpointConfig.ExternalizedCheckpointCleanup;
@@ -35,6 +39,9 @@ public abstract class FlinkStreaming extends BaseFlink {
     
     // 用于存放延期的数据
     // TODO: 如果需要使用，可以创建：new OutputTag<Type>("later_data")
+    
+    // 标准化侧输出流标签：用于存放脏数据或异常数据
+    public static final OutputTag<String> DIRTY_DATA_TAG = new OutputTag<>("flare_dirty_data") {};
 
     /**
      * 构建或合并 Configuration
@@ -52,7 +59,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         }
         
         // 从配置中加载其他 Flink 参数
-        PropUtils.getSettings().forEach((k, v) -> finalConf.setString(k, v));
+        PropUtils.getSettings().forEach(finalConf::setString);
         
         this.configuration = finalConf;
         return finalConf;
@@ -297,6 +304,39 @@ public abstract class FlinkStreaming extends BaseFlink {
             ((SingleOutputStreamOperator<T>) stream).setParallelism(parallelism);
         }
         return stream;
+    }
+
+    /**
+     * 为 DataStream 开启异步 I/O 关联
+     */
+    public <IN, OUT> DataStream<OUT> asyncLookup(
+            DataStream<IN> stream, AsyncFunction<IN, OUT> asyncFunction) {
+        
+        com.bhcode.flare.core.anno.connector.AsyncLookup anno = 
+                asyncFunction.getClass().getAnnotation(com.bhcode.flare.core.anno.connector.AsyncLookup.class);
+        
+        long timeout = 30;
+        int capacity = 100;
+        if (anno != null) {
+            timeout = anno.timeout();
+            capacity = anno.capacity();
+        }
+
+        return AsyncDataStream.unorderedWait(stream, asyncFunction, timeout, TimeUnit.SECONDS, capacity);
+    }
+
+    /**
+     * 获取脏数据侧输出流
+     */
+    public DataStream<String> getDirtyDataStream(SingleOutputStreamOperator<?> mainStream) {
+        return mainStream.getSideOutput(DIRTY_DATA_TAG);
+    }
+
+    /**
+     * 自动将侧输出流中的脏数据打印或落地（默认打印）
+     */
+    public void printDirtyData(SingleOutputStreamOperator<?> mainStream) {
+        this.getDirtyDataStream(mainStream).print("dirty-data");
     }
 
     /**

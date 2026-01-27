@@ -20,8 +20,10 @@ package com.bhcode.flare.connector;
 import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.connector.jdbc.JdbcConnector;
 import com.bhcode.flare.connector.kafka.KafkaConnector;
+import com.bhcode.flare.connector.hbase.HBaseConnector;
 import com.bhcode.flare.core.anno.connector.Jdbc;
 import com.bhcode.flare.core.anno.connector.Kafka;
+import com.bhcode.flare.core.anno.connector.HBase;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -77,6 +79,17 @@ public final class FlinkConnectors {
                 PropUtils.setProperty(prefix + "max.retries", String.valueOf(jdbc.maxRetries()));
                 setIfNotBlank(prefix + "upsert.mode", jdbc.upsertMode());
                 setIfNotBlank(prefix + "key.columns", jdbc.keyColumns());
+            }
+        }
+
+        HBase[] hbaseAnnos = targetClass.getAnnotationsByType(HBase.class);
+        if (hbaseAnnos != null) {
+            for (HBase hbase : hbaseAnnos) {
+                String prefix = HBaseConnector.hbasePrefix(hbase.keyNum());
+                setIfNotBlank(prefix + "zk.quorum", hbase.zkQuorum());
+                setIfNotBlank(prefix + "zk.port", hbase.zkPort());
+                setIfNotBlank(prefix + "znode.parent", hbase.znodeParent());
+                setIfNotBlank(prefix + "table.name", hbase.tableName());
             }
         }
     }

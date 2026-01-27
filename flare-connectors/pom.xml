@@ -48,5 +48,15 @@
             <artifactId>kafka-clients</artifactId>
             <scope>${maven.scope}</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+            <scope>${maven.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-common</artifactId>
+            <scope>${maven.scope}</scope>
+        </dependency>
     </dependencies>
 </project>

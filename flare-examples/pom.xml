@@ -28,6 +28,26 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.bhcode.flare</groupId>
+            <artifactId>flare-flink</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Flink Streaming -->
         <dependency>
             <groupId>org.apache.flink</groupId>
