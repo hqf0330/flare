@@ -1,102 +1,85 @@
-# Flare: 轻量级 Flink Java 开发框架
+# 🚀 Flare - 新一代现代 Flink 开发脚手架
 
-Flare 是一个专为 **Flink 1.19+** 和 **JDK 17** 深度定制的高级开发框架。它通过“注解驱动配置”和“标准化生命周期管理”，极大地简化了 Flink JAR 任务的开发成本，并内置了企业级的监控、治理与容灾能力。
+Flare 是一款专为 **Java 17** 和 **Flink 1.19+** 打造的高性能、极简开发脚手架。它深度参考了经典框架 `fire` 的设计精髓，并结合现代 Java 特性（Record, Lambda）进行了全方位的重构与进化。
 
-## 🚀 核心特性
+---
 
-*   **注解驱动配置**：通过 `@Streaming`, `@Kafka`, `@Jdbc`, `@State` 等注解替代繁琐的代码配置，实现零样板代码。
-*   **标准化生命周期**：定义了清晰的 `init` -> `before` -> `process` -> `after` 任务流，支持 `Step1-6` 分阶段逻辑拆分。
-*   **现代 Java 适配**：深度支持 **Java 17 record**，实现 Kafka JSON 数据到 DTO 的自动反序列化。
-*   **工业级容灾**：一键开启 **RocksDB** 状态后端、增量检查点（Incremental Checkpoint）以及全局状态过期（TTL）管理。
-*   **全方位可观测性**：
-    *   **分布式指标**：一行代码实现跨节点的分布式累加器与实时 Metrics 打点。
-    *   **自动血缘**：启动即打印数据源（Source）与落地端（Sink）的拓扑关系。
-    *   **日志追踪**：自动注入 `MDC` 变量（appName），支持在海量集群日志中秒级检索。
-*   **生产增强**：内置 JDBC **Upsert (幂等写入)** 自动生成逻辑，解决任务重启导致的数据重复痛点。
+## 🌟 核心特性
 
-## 🛠️ 技术栈
+### 1. 极简开发模型
+*   **Lambda 驱动**：维表关联、数据落库全部支持 Lambda 风格，彻底告别臃肿的匿名内部类。
+*   **Record 自动映射**：利用 Java 17 Record 特性，配合内置 `DBUtils`，实现 SQL 结果到对象的零代码自动映射。
+*   **注解驱动配置**：通过 `@Streaming`, `@Kafka`, `@Jdbc`, `@Redis` 等注解一键配置任务环境。
 
-*   **Runtime**: JRE 17+
-*   **Engine**: Apache Flink 1.19.1
-*   **Build**: Maven 3.8+
-*   **Frameworks**: Lombok, Jackson, SLF4J
+### 2. 生产级稳定性 (Production-Ready)
+*   **稳健连接池**：异步 I/O 全面集成 **HikariCP** 和 **JedisPool**，支持自动重连与高并发。
+*   **统一缓存管理**：内置 Caffeine 缓存，支持 **“空值保护”** 机制，有效防御缓存穿透。
+*   **状态恢复保障**：算子 UID 自动化生成，确保 Checkpoint 在任务升级或扩容后依然有效。
 
-## 📦 快速开始
+### 3. 全链路容错与治理
+*   **全局脏数据总线**：全任务关联失败数据自动收集、汇聚，支持一键分流处理。
+*   **性能自动优化**：自动注册 POJO 序列化、反射元数据缓存、禁用低效 Generic Types。
+*   **环境快照报告**：启动时自动打印详细的 Flink/Java/OS 环境报告，排查问题快人一步。
 
-### 1. 引入依赖
-在你的 `pom.xml` 中引入 `flare-flink` 模块。
+---
 
-### 2. 开发第一个 Flare 任务
-继承 `FlinkStreaming` 基类，使用注解定义环境，并在 `process` 中编写业务逻辑。
+## 🛠️ 快速上手
 
+### 1. 定义数据模型 (Record)
 ```java
-@Streaming(parallelism = 2, interval = 10)
-@Kafka(
-    brokers = "localhost:9092", 
-    topics = "user_action", 
-    groupId = "flare_group",
-    watermarkStrategy = "bounded"
-)
-@Jdbc(
-    url = "jdbc:mysql://localhost:3306/db",
-    sql = "INSERT INTO t_report(id, val) VALUES (?, ?)",
-    upsertMode = "mysql",
-    keyColumns = "id"
-)
-public class MyFirstTask extends FlinkStreaming {
+public record OrderEvent(String orderId, String userId, Double amount) {}
+public record UserInfo(String userName, String level) {}
+```
 
-    // 定义数据模型
-    public record UserAction(Long id, String action) {}
+### 2. 编写业务逻辑 (FlinkStreaming)
+```java
+@Streaming(appName = "MyEnrichJob", parallelism = 2)
+@Kafka(topics = "orders", groupId = "group1")
+@Jdbc(url = "jdbc:mysql://localhost:3306/db", username = "root", password = "...")
+public class MyJob extends FlinkStreaming {
 
     @Override
     public void process() {
-        // 1. 自动解析 Kafka JSON 为 Record
-        DataStream<UserAction> stream = this.kafkaSourceFromConf(UserAction.class);
+        // 1. 读取 Kafka
+        var source = this.kafkaSourceFromConf(OrderEvent.class);
+
+        // 2. 异步关联 MySQL (Lambda 风格 + 自动映射)
+        var joined = this.asyncJdbcLookup(source, 
+            "SELECT user_name as userName, level FROM t_user WHERE id = ?",
+            UserInfo.class,
+            (ps, order) -> ps.setString(1, order.userId()),
+            (user, order) -> new EnrichedOrder(order, user)
+        );
+
+        // 3. 自动化 JDBC Sink (零代码落库)
+        this.jdbcSink(joined, "t_enriched_orders");
         
-        // 2. 算子 UID 管理 (确保状态恢复兼容性)
-        this.uname(stream, "source_id");
-
-        // 3. 分布式指标打点
-        stream.map(new FlareRichMapFunction<UserAction, UserAction>() {
-            @Override
-            public UserAction map(UserAction value) {
-                counter("user_login_count");
-                return value;
-            }
-        });
-
-        // 4. 自动攒批、自动生成 Upsert SQL 写入 MySQL
-        this.jdbcSinkFromConf(stream, (ps, value) -> {
-            ps.setLong(1, value.id());
-            ps.setString(2, value.action());
-        });
-    }
-
-    public static void main(String[] args) {
-        FlinkJobLauncher.run(MyFirstTask.class, args);
+        // 4. 开启脏数据自动打印
+        // 配置 flare.dirty.data.print.enable = true 即可
     }
 }
 ```
 
-## 📖 注解详解
+---
 
-### `@Streaming`
-控制 Flink 运行模式、并行度、Checkpoint 间隔等。
+## 📂 项目结构
 
-### `@Kafka`
-配置 Kafka 连接信息。支持 `startFromTimestamp`（时间戳启动）和 `config`（底层参数透传）。
+*   `flare-common`: 核心工具类、JSON 处理、DB 自动映射。
+*   `flare-core`: 框架核心生命周期、注解定义。
+*   `flare-connectors`: Kafka, JDBC, Redis, HBase 深度封装连接器。
+*   `flare-flink`: Flink 运行时环境、异步算子包装器、指标与监控。
+*   `flare-jobs`: **业务代码收容所**（Git 已忽略，专供业务开发）。
 
-### `@Jdbc`
-配置数据库连接。核心属性 `upsertMode="mysql"` 会自动将 `INSERT` 语句增强为 `ON DUPLICATE KEY UPDATE`。
+---
 
-### `@State`
-配置状态后端。支持 `backend="rocksdb"`，并可指定 `checkpointDir` 的 HDFS 路径。
+## 📈 性能与调优
 
-## 🛡️ 生产环境建议
+Flare 默认开启了多项性能优化：
+*   **POJO 自动注册**：无需手动调用 `registerPojoType`。
+*   **反射缓存**：`DBUtils` 内部缓存构造器与字段，极大降低反射开销。
+*   **配置覆盖**：`.properties` 配置文件优先级高于注解，支持线上不改代码动态调优。
 
-1.  **状态恢复**：务必使用 `this.uname(stream, "unique_id")` 为关键算子设置 ID。
-2.  **日志检索**：在日志配置文件（logback.xml）的 Pattern 中加入 `%X{appName}`。
-3.  **资源回收**：框架内置了 JVM Shutdown Hook，确保在任务停止时优雅关闭数据库连接。
+---
 
-## 📝 开源协议
-Apache License 2.0
+## 🎯 愿景
+让 Flink 开发像写脚本一样简单，像写微服务一样稳健。
