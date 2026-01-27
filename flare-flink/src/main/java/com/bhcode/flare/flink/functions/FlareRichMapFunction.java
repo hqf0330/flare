@@ -1,11 +1,13 @@
 package com.bhcode.flare.flink.functions;
 
 import com.bhcode.flare.connector.jdbc.JdbcConnector;
+import com.bhcode.flare.connector.redis.RedisConnector;
 import com.bhcode.flare.core.anno.connector.AsyncLookup;
 import com.bhcode.flare.flink.cache.LookupCacheManager;
 import com.bhcode.flare.flink.util.MetricUtils;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
+import redis.clients.jedis.Jedis;
 
 import java.util.List;
 
@@ -70,7 +72,7 @@ public abstract class FlareRichMapFunction<IN, OUT> extends RichMapFunction<IN, 
 
     protected String redisGet(int keyNum, String key) {
         return (String) cacheManager.get("redis_" + keyNum + "_" + key, k -> {
-            try (redis.clients.jedis.Jedis jedis = com.bhcode.flare.connector.redis.RedisConnector.getJedis(keyNum)) {
+            try (Jedis jedis = RedisConnector.getJedis(keyNum)) {
                 return jedis.get(key);
             }
         });

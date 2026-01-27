@@ -36,6 +36,7 @@ public class FlareFlinkConf {
     public static final String DISTRIBUTE_SYNC_ENABLE = "fire.distribute.sync.enable";
     public static final String OPERATOR_CHAINING_ENABLE = "flink.env.operatorChaining.enable";
     public static final String FLINK_TABLE_ENV_ENABLE = "flink.table.env.enable";
+    public static final String FLINK_DIRTY_DATA_PRINT_ENABLE = "flare.dirty.data.print.enable";
 
     // ========== Checkpoint 相关配置 ==========
     public static final String FLINK_STREAM_CHECKPOINT_INTERVAL = "flink.stream.checkpoint.interval";
@@ -218,6 +219,10 @@ public class FlareFlinkConf {
 
     public static boolean isJobAutoStart() {
         return PropUtils.getBoolean(FLINK_JOB_AUTO_START, true);
+    }
+
+    public static boolean isDirtyDataPrintEnable() {
+        return PropUtils.getBoolean(FLINK_DIRTY_DATA_PRINT_ENABLE, false);
     }
 
     private FlareFlinkConf() {

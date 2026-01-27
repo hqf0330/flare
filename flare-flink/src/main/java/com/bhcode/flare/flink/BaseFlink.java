@@ -1,12 +1,15 @@
 package com.bhcode.flare.flink;
 
 import com.bhcode.flare.common.anno.Config;
+import com.bhcode.flare.common.util.FlareUtils;
 import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.core.BaseFlare;
 import com.bhcode.flare.flink.anno.Checkpoint;
 import com.bhcode.flare.flink.anno.State;
 import com.bhcode.flare.flink.anno.Streaming;
+import com.bhcode.flare.flink.conf.FlareFlinkConf;
 import com.bhcode.flare.flink.conf.FlinkAnnoManager;
+import com.bhcode.flare.flink.util.FlinkSingletonFactory;
 import com.bhcode.flare.flink.util.FlinkUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -37,35 +40,26 @@ public abstract class BaseFlink extends BaseFlare {
         PropUtils.load(this.className);
         PropUtils.load(this.driverClass);
 
-        if (com.bhcode.flare.common.util.FlareUtils.isLocalRunMode()) {
+        if (FlareUtils.isLocalRunMode()) {
             this.loadConf();
             // TODO: 加载用户通用配置和任务配置
         }
 
         // 设置 Flink 相关属性
         PropUtils.setProperty(
-                com.bhcode.flare.flink.conf.FlareFlinkConf.FLINK_DRIVER_CLASS_NAME, 
+                FlareFlinkConf.FLINK_DRIVER_CLASS_NAME, 
                 this.className);
         PropUtils.setProperty(
-                com.bhcode.flare.flink.conf.FlareFlinkConf.FLINK_CLIENT_SIMPLE_CLASS_NAME, 
+                FlareFlinkConf.FLINK_CLIENT_SIMPLE_CLASS_NAME, 
                 this.driverClass);
 
         // 允许通过配置覆盖 appName
-        String configAppName = com.bhcode.flare.flink.conf.FlareFlinkConf.getFlinkAppName();
+        String configAppName = FlareFlinkConf.getFlinkAppName();
         if (StringUtils.isNotBlank(configAppName)) {
             this.setAppName(configAppName.trim());
         }
 
-        com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().setAppName(this.appName);
-
-        // 注册常用 POJO 类以优化序列化性能
-        // getEnv().getConfig().registerPojoType(YourBean.class);
-        
-        // 强制开启 Kryo 序列化作为兜底（可选）
-        // getEnv().getConfig().enableForceKryo();
-        
-        // 禁用 Generic Types 以强制用户使用 POJO 或 Kryo，提高性能
-        // getEnv().getConfig().disableGenericTypes();
+        FlinkSingletonFactory.getInstance().setAppName(this.appName);
 
         log.debug("BaseFlink initialization completed");
     }
@@ -194,7 +188,7 @@ public abstract class BaseFlink extends BaseFlare {
         // 注意：此处的 counter 在分布式环境下仅在当前 JVM（TaskManager）生效
         // 建议在算子内部使用 MetricUtils.counter(getRuntimeContext(), name, count)
         log.debug("Local JVM Metric Counter [{}]: +{}", name, count);
-        com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().updateMetric(name, count);
+        FlinkSingletonFactory.getInstance().updateMetric(name, count);
     }
 
     private void applyKeyValue(String text) {

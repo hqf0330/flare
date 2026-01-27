@@ -1,23 +1,27 @@
 package com.bhcode.flare.flink;
 
 import com.bhcode.flare.common.enums.JobType;
+import com.bhcode.flare.common.util.FlareUtils;
+import com.bhcode.flare.common.util.JSONUtils;
 import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.connector.FlinkConnectors;
 import com.bhcode.flare.connector.jdbc.JdbcParameterBinder;
 import com.bhcode.flare.connector.jdbc.JdbcResultJoiner;
-import com.bhcode.flare.connector.redis.RedisConnector;
-import redis.clients.jedis.Jedis;
+import com.bhcode.flare.core.anno.connector.AsyncLookup;
 import com.bhcode.flare.flink.anno.Streaming;
-import com.bhcode.flare.flink.cache.LookupCacheManager;
 import com.bhcode.flare.flink.conf.FlareFlinkConf;
+import com.bhcode.flare.flink.functions.AsyncDirtyDataWrapper;
+import com.bhcode.flare.flink.functions.AsyncResult;
 import com.bhcode.flare.flink.functions.LambdaAsyncJdbcLookupFunction;
 import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction;
 import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction.RedisLookupLogic;
 import com.bhcode.flare.flink.util.FlinkSingletonFactory;
 import com.bhcode.flare.flink.util.FlinkUtils;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.RuntimeExecutionMode;
+import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -26,14 +30,18 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.async.AsyncFunction;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 
 import java.sql.PreparedStatement;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -41,9 +49,29 @@ import static org.apache.flink.streaming.api.environment.CheckpointConfig.Extern
 
 @Slf4j
 public abstract class FlinkStreaming extends BaseFlink {
-    
+
+    /**
+     * -- GETTER --
+     *  获取 Flink StreamExecutionEnvironment
+     *
+     * @return StreamExecutionEnvironment
+     */
+    @Getter
     protected StreamExecutionEnvironment env;
+    /**
+     * -- GETTER --
+     *  获取 Flink TableEnvironment
+     *
+     * @return StreamTableEnvironment
+     */
+    @Getter
     protected StreamTableEnvironment tableEnv;
+    
+    // 自动收集需要注册序列化的类（C 计划：性能优化）
+    private final Set<Class<?>> pojoClasses = new java.util.HashSet<>();
+    
+    // 全局脏数据流收集器（D 计划：脏数据管理）
+    private final List<DataStream<String>> dirtyDataStreams = new java.util.ArrayList<>();
     
     // 用于存放延期的数据
     // TODO: 如果需要使用，可以创建：new OutputTag<Type>("later_data")
@@ -62,7 +90,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         Configuration finalConf = conf != null ? conf : new Configuration();
         
         // 仅本地模式启用 Web UI
-        if (com.bhcode.flare.common.util.FlareUtils.isLocalRunMode()) {
+        if (FlareUtils.isLocalRunMode()) {
             finalConf.setBoolean(ConfigConstants.LOCAL_START_WEBSERVER, true);
         }
         
@@ -89,7 +117,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         
         // 创建 StreamExecutionEnvironment
         // 判断是否是本地模式
-        if (com.bhcode.flare.common.util.FlareUtils.isLocalRunMode()) {
+        if (FlareUtils.isLocalRunMode()) {
             this.env = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(finalConf);
             log.info("Running in local mode with Web UI enabled");
         } else {
@@ -119,7 +147,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         this.env.setRuntimeMode(runtimeMode);
         
         // 设置全局参数
-        this.env.getConfig().setGlobalJobParameters(org.apache.flink.api.java.utils.ParameterTool.fromMap(finalConf.toMap()));
+        this.env.getConfig().setGlobalJobParameters(ParameterTool.fromMap(finalConf.toMap()));
         
         // 从配置文件读取 operatorChainingEnable
         if (!FlareFlinkConf.isOperatorChainingEnable()) {
@@ -150,7 +178,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         }
         
         // 保存到单例工厂
-        com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance()
+        FlinkSingletonFactory.getInstance()
                 .setStreamEnv(this.env)
                 .setTableEnv(this.tableEnv)
                 .setAppName(this.appName);
@@ -320,8 +348,8 @@ public abstract class FlinkStreaming extends BaseFlink {
     public <IN, OUT> DataStream<OUT> asyncLookup(
             DataStream<IN> stream, AsyncFunction<IN, OUT> asyncFunction) {
         
-        com.bhcode.flare.core.anno.connector.AsyncLookup anno = 
-                asyncFunction.getClass().getAnnotation(com.bhcode.flare.core.anno.connector.AsyncLookup.class);
+        AsyncLookup anno = 
+                asyncFunction.getClass().getAnnotation(AsyncLookup.class);
         
         long timeout = 30;
         int capacity = 100;
@@ -330,14 +358,68 @@ public abstract class FlinkStreaming extends BaseFlink {
             capacity = anno.capacity();
         }
 
-        return AsyncDataStream.unorderedWait(stream, asyncFunction, timeout, TimeUnit.SECONDS, capacity);
+        // 包装异步函数以支持脏数据收集
+        AsyncDirtyDataWrapper<IN, OUT> wrapper = new AsyncDirtyDataWrapper<>(asyncFunction);
+        
+        SingleOutputStreamOperator<AsyncResult<IN, OUT>> resultStream = 
+                AsyncDataStream.unorderedWait(stream, wrapper, timeout, TimeUnit.SECONDS, capacity);
+
+        // 使用 ProcessFunction 进行分流：正常数据去主流，异常数据去侧输出流
+        SingleOutputStreamOperator<OUT> mainStream = resultStream.process(new ProcessFunction<AsyncResult<IN, OUT>, OUT>() {
+            @Override
+            public void processElement(AsyncResult<IN, OUT> result, Context ctx, Collector<OUT> out) throws Exception {
+                if (result.isSuccess()) {
+                    if (result.getData() != null) {
+                        out.collect(result.getData());
+                    }
+                } else {
+                    // 收集脏数据：将原始输入转为 JSON 字符串发送到侧输出流
+                    String dirtyData = JSONUtils.toJSONString(result.getOrigin());
+                    ctx.output(DIRTY_DATA_TAG, dirtyData);
+                }
+            }
+        });
+
+        // 自动注册脏数据流到全局收集器
+        this.addDirtyDataStream(mainStream.getSideOutput(DIRTY_DATA_TAG));
+
+        return mainStream;
     }
 
     /**
-     * 获取脏数据侧输出流
+     * 获取全局汇聚后的脏数据流（D 计划：一键汇聚全任务脏数据）
+     */
+    public DataStream<String> getGlobalDirtyDataStream() {
+        if (dirtyDataStreams.isEmpty()) {
+            log.warn("No dirty data streams collected in this job");
+            return null;
+        }
+        if (dirtyDataStreams.size() == 1) {
+            return dirtyDataStreams.get(0);
+        }
+        DataStream<String> first = dirtyDataStreams.get(0);
+        @SuppressWarnings("unchecked")
+        DataStream<String>[] others = dirtyDataStreams.subList(1, dirtyDataStreams.size())
+                .toArray(new DataStream[0]);
+        return first.union(others);
+    }
+
+    /**
+     * 注册一个新的脏数据流到全局收集器
+     */
+    public void addDirtyDataStream(DataStream<String> stream) {
+        if (stream != null) {
+            this.dirtyDataStreams.add(stream);
+        }
+    }
+
+    /**
+     * 获取脏数据侧输出流，并自动注册到全局收集器
      */
     public DataStream<String> getDirtyDataStream(SingleOutputStreamOperator<?> mainStream) {
-        return mainStream.getSideOutput(DIRTY_DATA_TAG);
+        DataStream<String> dirtyStream = mainStream.getSideOutput(DIRTY_DATA_TAG);
+        this.addDirtyDataStream(dirtyStream);
+        return dirtyStream;
     }
 
     /**
@@ -371,10 +453,26 @@ public abstract class FlinkStreaming extends BaseFlink {
             JdbcParameterBinder<IN> binder,
             JdbcResultJoiner<DIM, IN, OUT> joiner) {
         
+        // 自动注册 POJO 以提升序列化性能
+        this.registerPojo(dimClass);
+        
         LambdaAsyncJdbcLookupFunction<IN, DIM, OUT> asyncFunction = 
                 new LambdaAsyncJdbcLookupFunction<>(keyNum, sql, dimClass, binder, joiner);
         
         return this.asyncLookup(stream, asyncFunction);
+    }
+
+    /**
+     * 注册 POJO 类以优化序列化性能
+     */
+    public void registerPojo(Class<?>... classes) {
+        if (classes != null) {
+            for (Class<?> clazz : classes) {
+                if (clazz != null && !clazz.isPrimitive() && !clazz.getName().startsWith("java.")) {
+                    this.pojoClasses.add(clazz);
+                }
+            }
+        }
     }
 
     /**
@@ -418,6 +516,28 @@ public abstract class FlinkStreaming extends BaseFlink {
             if (this.env == null) {
                 throw new IllegalStateException("StreamExecutionEnvironment is not initialized");
             }
+
+            // C 计划：自动化序列化优化
+            if (!pojoClasses.isEmpty()) {
+                log.info("Auto-registering {} POJO classes for serialization optimization", pojoClasses.size());
+                for (Class<?> clazz : pojoClasses) {
+                    this.env.getConfig().registerPojoType(clazz);
+                    log.debug("Registered POJO: {}", clazz.getName());
+                }
+            }
+            // 禁用 Generic Types 以强制使用 POJO 或 Kryo，提高性能
+            this.env.getConfig().disableGenericTypes();
+            // 兜底：如果不是 POJO，强制使用 Kryo 而不是 Java 序列化
+            this.env.getConfig().enableForceKryo();
+
+            // D 计划：根据配置自动处理脏数据打印
+            if (FlareFlinkConf.isDirtyDataPrintEnable()) {
+                DataStream<String> globalDirty = this.getGlobalDirtyDataStream();
+                if (globalDirty != null) {
+                    globalDirty.print("flare-dirty-data").name("AutoDirtyDataPrint");
+                }
+            }
+
             this.env.execute(finalJobName);
         } catch (Exception e) {
             log.error("Failed to start Flink job: {}", finalJobName, e);
@@ -453,6 +573,7 @@ public abstract class FlinkStreaming extends BaseFlink {
     }
 
     public <T> DataStream<T> kafkaSourceFromConf(Class<T> clazz, String topicOverride, int keyNum) {
+        this.registerPojo(clazz);
         return FlinkConnectors.kafkaSourceFromConf(this.env, clazz, topicOverride, keyNum);
     }
 
@@ -485,24 +606,6 @@ public abstract class FlinkStreaming extends BaseFlink {
         FlinkConnectors.jdbcSinkFromConf(stream, binder, keyNum);
     }
 
-    /**
-     * 获取 Flink StreamExecutionEnvironment
-     *
-     * @return StreamExecutionEnvironment
-     */
-    public StreamExecutionEnvironment getEnv() {
-        return env;
-    }
-
-    /**
-     * 获取 Flink TableEnvironment
-     *
-     * @return StreamTableEnvironment
-     */
-    public StreamTableEnvironment getTableEnv() {
-        return tableEnv;
-    }
-    
     /**
      * 配置解析和应用
      * <p>

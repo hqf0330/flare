@@ -66,8 +66,14 @@ public class AsyncLookupTask extends FlinkStreaming {
             return new ActionWithUser(input.userId(), input.userName(), input.level(), input.action() + "_" + (city != null ? city : "unknown"));
         });
 
-        // 4. 打印结果
+        // 4. 打印主流结果
         redisJoinedStream.print("final-data");
+
+        // 5. 处理全局脏数据（D 计划：一键汇聚全任务关联失败的数据）
+        DataStream<String> globalDirtyData = this.getGlobalDirtyDataStream();
+        if (globalDirtyData != null) {
+            globalDirtyData.print("global-dirty-data");
+        }
     }
 
     // 业务数据模型
