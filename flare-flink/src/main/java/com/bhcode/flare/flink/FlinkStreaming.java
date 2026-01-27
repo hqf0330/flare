@@ -41,6 +41,8 @@ import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 
 import java.sql.PreparedStatement;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +56,7 @@ public abstract class FlinkStreaming extends BaseFlink {
 
     /**
      * -- GETTER --
-     *  获取 Flink StreamExecutionEnvironment
+     * 获取 Flink StreamExecutionEnvironment
      *
      * @return StreamExecutionEnvironment
      */
@@ -62,24 +64,25 @@ public abstract class FlinkStreaming extends BaseFlink {
     protected StreamExecutionEnvironment env;
     /**
      * -- GETTER --
-     *  获取 Flink TableEnvironment
+     * 获取 Flink TableEnvironment
      *
      * @return StreamTableEnvironment
      */
     @Getter
     protected StreamTableEnvironment tableEnv;
-    
+
     // 自动收集需要注册序列化的类（C 计划：性能优化）
-    private final Set<Class<?>> pojoClasses = new java.util.HashSet<>();
-    
+    private final Set<Class<?>> pojoClasses = new HashSet<>();
+
     // 全局脏数据流收集器（D 计划：脏数据管理）
-    private final List<DataStream<String>> dirtyDataStreams = new java.util.ArrayList<>();
-    
+    private final List<DataStream<String>> dirtyDataStreams = new ArrayList<>();
+
     // 用于存放延期的数据
     // TODO: 如果需要使用，可以创建：new OutputTag<Type>("later_data")
-    
+
     // 标准化侧输出流标签：用于存放脏数据或异常数据
-    public static final OutputTag<String> DIRTY_DATA_TAG = new OutputTag<>("flare_dirty_data") {};
+    public static final OutputTag<String> DIRTY_DATA_TAG = new OutputTag<>("flare_dirty_data") {
+    };
 
     /**
      * 构建或合并 Configuration
@@ -90,15 +93,15 @@ public abstract class FlinkStreaming extends BaseFlink {
     @Override
     public Configuration buildConf(Configuration conf) {
         Configuration finalConf = conf != null ? conf : new Configuration();
-        
+
         // 仅本地模式启用 Web UI
         if (FlareUtils.isLocalRunMode()) {
             finalConf.setBoolean(ConfigConstants.LOCAL_START_WEBSERVER, true);
         }
-        
+
         // 从配置中加载其他 Flink 参数
         PropUtils.getSettings().forEach(finalConf::setString);
-        
+
         this.configuration = finalConf;
         return finalConf;
     }
@@ -114,9 +117,9 @@ public abstract class FlinkStreaming extends BaseFlink {
         // if (FlinkUtils.isYarnApplicationMode() || FlareUtils.isLocalRunMode()) {
         //     this.restfulRegister.startRestServer();
         // }
-        
+
         Configuration finalConf = this.buildConf((Configuration) conf);
-        
+
         // 创建 StreamExecutionEnvironment
         // 判断是否是本地模式
         if (FlareUtils.isLocalRunMode()) {
@@ -126,10 +129,10 @@ public abstract class FlinkStreaming extends BaseFlink {
             this.env = StreamExecutionEnvironment.getExecutionEnvironment();
             log.info("Running in cluster mode");
         }
-        
+
         // 解析并应用 @Streaming 注解配置
         this.applyStreamingAnnotation();
-        
+
         // 获取运行时模式（优先从注解，其次从配置文件，最后默认值）
         RuntimeExecutionMode runtimeMode = RuntimeExecutionMode.STREAMING;
         Streaming streaming = this.getClass().getAnnotation(Streaming.class);
@@ -147,44 +150,44 @@ public abstract class FlinkStreaming extends BaseFlink {
             }
         }
         this.env.setRuntimeMode(runtimeMode);
-        
+
         // 设置全局参数
         this.env.getConfig().setGlobalJobParameters(ParameterTool.fromMap(finalConf.toMap()));
-        
+
         // 从配置文件读取 operatorChainingEnable
         if (!FlareFlinkConf.isOperatorChainingEnable()) {
             this.env.disableOperatorChaining();
             log.debug("Operator chaining disabled from config");
         }
-        
+
         // 配置解析 and 应用（解析配置文件中的 Flink 参数）
         this.configParse(this.env);
-        
+
         // 创建 TableEnvironment（可选，默认为关闭，避免引入 Table Planner 依赖）
         if (FlareFlinkConf.isTableEnvEnable()) {
             EnvironmentSettings.Builder builder = EnvironmentSettings.newInstance();
             if (runtimeMode == RuntimeExecutionMode.BATCH) {
                 this.tableEnv = StreamTableEnvironment.create(
-                    this.env,
-                    builder.inBatchMode().build()
+                        this.env,
+                        builder.inBatchMode().build()
                 );
             } else {
                 this.tableEnv = StreamTableEnvironment.create(
-                    this.env,
-                    builder.inStreamingMode().build()
+                        this.env,
+                        builder.inStreamingMode().build()
                 );
             }
         } else {
             log.info("TableEnvironment is disabled by config: {}", FlareFlinkConf.FLINK_TABLE_ENV_ENABLE);
             this.tableEnv = null;
         }
-        
+
         // 保存到单例工厂
         FlinkSingletonFactory.getInstance()
                 .setStreamEnv(this.env)
                 .setTableEnv(this.tableEnv)
                 .setAppName(this.appName);
-        
+
         log.info("Flink StreamExecutionEnvironment initialized");
     }
 
@@ -197,7 +200,7 @@ public abstract class FlinkStreaming extends BaseFlink {
             log.warn("TableEnvironment is not initialized, skip loading SQL configuration");
             return;
         }
-        
+
         // 从配置中加载 SQL 配置
         // 查找所有以 "sql.set." 开头的配置项
         Map<String, String> sqlConfigs = PropUtils.sliceKeys("sql.set.");
@@ -207,7 +210,7 @@ public abstract class FlinkStreaming extends BaseFlink {
                 this.tableEnv.getConfig().getConfiguration().setString(k, v);
             });
         }
-        
+
         // 也支持 "flink.sql.set." 前缀
         Map<String, String> flinkSqlConfigs = PropUtils.sliceKeys("flink.sql.set.");
         if (!flinkSqlConfigs.isEmpty()) {
@@ -217,7 +220,7 @@ public abstract class FlinkStreaming extends BaseFlink {
             });
         }
     }
-    
+
     /**
      * 在加载任务配置文件前将被加载
      */
@@ -242,7 +245,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         FlinkConnectors.applyConnectorAnnotations(this.getClass());
         super.init(conf, args);
         this.processAll();
-        
+
         // 自动启动任务（可通过配置关闭）
         if (FlareFlinkConf.isJobAutoStart()) {
             this.start();
@@ -250,7 +253,7 @@ public abstract class FlinkStreaming extends BaseFlink {
             log.info("Auto start is disabled by config: {}", FlareFlinkConf.FLINK_JOB_AUTO_START);
         }
     }
-    
+
     /**
      * 获取任务类型
      *
@@ -349,27 +352,29 @@ public abstract class FlinkStreaming extends BaseFlink {
      */
     public <IN, OUT> DataStream<OUT> asyncLookup(
             DataStream<IN> stream, AsyncFunction<IN, OUT> asyncFunction) {
-        
-        AsyncLookup anno = 
+
+        AsyncLookup anno =
                 asyncFunction.getClass().getAnnotation(AsyncLookup.class);
-        
-        long timeout = 30;
-        int capacity = 100;
+
+        // 优先级：配置文件 > 注解 > 默认值
+        long timeout = PropUtils.getLong("flare.async.timeout", 30);
+        int capacity = PropUtils.getInt("flare.async.capacity", 100);
+
         if (anno != null) {
-            timeout = anno.timeout();
-            capacity = anno.capacity();
+            if (PropUtils.getString("flare.async.timeout") == null) timeout = anno.timeout();
+            if (PropUtils.getString("flare.async.capacity") == null) capacity = anno.capacity();
         }
 
         // 包装异步函数以支持脏数据收集
         AsyncDirtyDataWrapper<IN, OUT> wrapper = new AsyncDirtyDataWrapper<>(asyncFunction);
-        
-        SingleOutputStreamOperator<AsyncResult<IN, OUT>> resultStream = 
+
+        SingleOutputStreamOperator<AsyncResult<IN, OUT>> resultStream =
                 AsyncDataStream.unorderedWait(stream, wrapper, timeout, TimeUnit.SECONDS, capacity);
 
         // 使用 ProcessFunction 进行分流：正常数据去主流，异常数据去侧输出流
-        SingleOutputStreamOperator<OUT> mainStream = resultStream.process(new ProcessFunction<AsyncResult<IN, OUT>, OUT>() {
+        SingleOutputStreamOperator<OUT> mainStream = resultStream.process(new ProcessFunction<>() {
             @Override
-            public void processElement(AsyncResult<IN, OUT> result, Context ctx, Collector<OUT> out) throws Exception {
+            public void processElement(AsyncResult<IN, OUT> result, Context ctx, Collector<OUT> out) {
                 if (result.isSuccess()) {
                     if (result.getData() != null) {
                         out.collect(result.getData());
@@ -454,13 +459,13 @@ public abstract class FlinkStreaming extends BaseFlink {
             Class<DIM> dimClass,
             JdbcParameterBinder<IN> binder,
             JdbcResultJoiner<DIM, IN, OUT> joiner) {
-        
+
         // 自动注册 POJO 以提升序列化性能
         this.registerPojo(dimClass);
-        
-        LambdaAsyncJdbcLookupFunction<IN, DIM, OUT> asyncFunction = 
+
+        LambdaAsyncJdbcLookupFunction<IN, DIM, OUT> asyncFunction =
                 new LambdaAsyncJdbcLookupFunction<>(keyNum, sql, dimClass, binder, joiner);
-        
+
         return this.asyncLookup(stream, asyncFunction);
     }
 
@@ -493,7 +498,7 @@ public abstract class FlinkStreaming extends BaseFlink {
             DataStream<IN> stream,
             int keyNum,
             RedisLookupLogic<IN, OUT> logic) {
-        LambdaAsyncRedisLookupFunction<IN, OUT> asyncFunction = 
+        LambdaAsyncRedisLookupFunction<IN, OUT> asyncFunction =
                 new LambdaAsyncRedisLookupFunction<>(keyNum, logic);
         return this.asyncLookup(stream, asyncFunction);
     }
@@ -735,8 +740,8 @@ public abstract class FlinkStreaming extends BaseFlink {
             String externalized = FlareFlinkConf.getStreamCheckpointExternalized();
             if (StringUtils.isNotBlank(externalized)) {
                 try {
-                    ExternalizedCheckpointCleanup cleanup = 
-                        ExternalizedCheckpointCleanup.valueOf(externalized.trim());
+                    ExternalizedCheckpointCleanup cleanup =
+                            ExternalizedCheckpointCleanup.valueOf(externalized.trim());
                     ckConfig.enableExternalizedCheckpoints(cleanup);
                     log.debug("Set externalized checkpoint cleanup from config: {}", cleanup);
                 } catch (IllegalArgumentException e) {
@@ -790,22 +795,22 @@ public abstract class FlinkStreaming extends BaseFlink {
             // 转换为毫秒
             long intervalMs = checkpointInterval * 1000L;
             this.env.enableCheckpointing(intervalMs);
-            
+
             CheckpointConfig checkpointConfig = this.env.getCheckpointConfig();
-            
+
             // 设置 checkpoint 模式
             checkpointConfig.setCheckpointingMode(streaming.mode());
-            
+
             // 设置 checkpoint 超时时间
             if (streaming.timeout() > 0) {
                 checkpointConfig.setCheckpointTimeout(streaming.timeout() * 1000L);
             }
-            
+
             // 设置最大并发 checkpoint
             if (streaming.concurrent() > 0) {
                 checkpointConfig.setMaxConcurrentCheckpoints(streaming.concurrent());
             }
-            
+
             // 设置两次 checkpoint 之间的最小间隔
             if (streaming.pauseBetween() > 0) {
                 checkpointConfig.setMinPauseBetweenCheckpoints(streaming.pauseBetween() * 1000L);
@@ -813,19 +818,19 @@ public abstract class FlinkStreaming extends BaseFlink {
                 // 如果没有设置，默认使用 checkpoint 间隔
                 checkpointConfig.setMinPauseBetweenCheckpoints(intervalMs);
             }
-            
+
             // 设置可容忍的 checkpoint 失败次数
             if (streaming.failureNumber() >= 0) {
                 checkpointConfig.setTolerableCheckpointFailureNumber(streaming.failureNumber());
             }
-            
+
             // 设置外部化 checkpoint
             checkpointConfig.setExternalizedCheckpointCleanup(streaming.cleanup());
-            
+
             // 设置非对齐 checkpoint
             checkpointConfig.enableUnalignedCheckpoints(streaming.unaligned());
-            
-            log.info("Checkpoint configured: interval={}s, mode={}, timeout={}s", 
+
+            log.info("Checkpoint configured: interval={}s, mode={}, timeout={}s",
                     checkpointInterval, streaming.mode(), streaming.timeout());
         }
 

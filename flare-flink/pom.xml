@@ -108,29 +108,15 @@
             <artifactId>flink-table-common</artifactId>
             <scope>${maven.scope}</scope>
         </dependency>
-        <!-- Flink Table Planner (运行时可选，需要启用 TableEnvironment 时提供) -->
-        <!-- Flink 1.19+ 使用 flink-table-planner-loader -->
+        <!-- Flink Table Planner (运行时可选) -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-table-planner-loader</artifactId>
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
-        <!-- Flink Scala Bridge (测试时需要，用于 Table Planner) -->
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-scala_2.12</artifactId>
-            <version>${flink.version}</version>
-            <scope>test</scope>
-        </dependency>
         
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-connector-base</artifactId>
-            <scope>${maven.scope}</scope>
-        </dependency>
-        
-        <!-- Hive (可选，如果使用 Hive Catalog) -->
+        <!-- Hive (可选) -->
         <dependency>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-exec</artifactId>
@@ -168,28 +154,6 @@
             <groupId>org.apache.rocketmq</groupId>
             <artifactId>rocketmq-client</artifactId>
             <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-client</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-common</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        
-        <!-- SparkJava (REST 服务，可选) -->
-        <dependency>
-            <groupId>com.sparkjava</groupId>
-            <artifactId>spark-core</artifactId>
-            <scope>${maven.scope}</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
         </dependency>
         
         <!-- 测试依赖 -->

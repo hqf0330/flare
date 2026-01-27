@@ -61,7 +61,35 @@ public abstract class BaseFlink extends BaseFlare {
 
         FlinkSingletonFactory.getInstance().setAppName(this.appName);
 
+        // 打印环境报告（D 计划：增强可维护性）
+        this.printEnvironmentReport();
+
         log.debug("BaseFlink initialization completed");
+    }
+
+    /**
+     * 打印环境快照报告（对标 fire）
+     */
+    private void printEnvironmentReport() {
+        log.info("---------------------------------------------------------------------------");
+        log.info("🔥 FLARE Framework Environment Report");
+        log.info("---------------------------------------------------------------------------");
+        log.info("Job Name: {}", this.appName);
+        log.info("Driver Class: {}", this.className);
+        log.info("Flink Version: {}", org.apache.flink.runtime.util.EnvironmentInformation.getVersion());
+        log.info("Java Version: {}", System.getProperty("java.version"));
+        log.info("OS: {} ({})", System.getProperty("os.name"), System.getProperty("os.arch"));
+        
+        // 打印加载的配置文件
+        log.info("Loaded Configs: flink.properties, flare.properties, {}.properties", this.className);
+        
+        // 打印识别到的核心注解
+        if (this.getClass().isAnnotationPresent(Streaming.class)) {
+            Streaming s = this.getClass().getAnnotation(Streaming.class);
+            log.info("Annotation [@Streaming]: parallelism={}, mode={}", s.parallelism(), s.mode());
+        }
+        
+        log.info("---------------------------------------------------------------------------");
     }
     
     /**

@@ -3,8 +3,8 @@ package com.bhcode.flare.connector.kafka;
 import com.bhcode.flare.common.lineage.LineageManager;
 import com.bhcode.flare.common.util.JSONUtils;
 import com.bhcode.flare.common.util.PropUtils;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SerializationSchema;
@@ -24,11 +24,9 @@ import java.util.Map;
 import java.util.Properties;
 
 @Slf4j
+@NoArgsConstructor
 public final class KafkaConnector {
 
-    private KafkaConnector() {
-        // Utility class
-    }
 
     public static String kafkaPrefix(int keyNum) {
         validateKeyNum(keyNum);
@@ -141,15 +139,12 @@ public final class KafkaConnector {
         // Define serialization: String remains String, others to JSON
         KafkaRecordSerializationSchema<T> serializer = KafkaRecordSerializationSchema.<T>builder()
                 .setTopic(finalTopic)
-                .setValueSerializationSchema(new SerializationSchema<T>() {
-                    @Override
-                    public byte[] serialize(T element) {
-                        if (element == null) return null;
-                        if (element instanceof String) {
-                            return ((String) element).getBytes();
-                        }
-                        return JSONUtils.toJSONString(element).getBytes();
+                .setValueSerializationSchema((SerializationSchema<T>) element -> {
+                    if (element == null) return null;
+                    if (element instanceof String) {
+                        return ((String) element).getBytes();
                     }
+                    return JSONUtils.toJSONString(element).getBytes();
                 })
                 .build();
 
@@ -157,10 +152,14 @@ public final class KafkaConnector {
                 .setBootstrapServers(bootstrapServers)
                 .setRecordSerializer(serializer)
                 .setKafkaProducerConfig(extraProps)
-                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE) // Default to ALO for performance
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
-        stream.sinkTo(sink).name("kafka-sink-" + finalTopic);
+        // 关键优化：自动设定稳定的 UID 和 Name，确保状态可恢复
+        stream.sinkTo(sink)
+                .name("KafkaSink-" + finalTopic)
+                .uid("uid-kafka-sink-" + finalTopic + "-" + keyNum);
+        
         LineageManager.addLineage("Flink", "Kafka:" + bootstrapServers + "/" + finalTopic, "SINK");
     }
 

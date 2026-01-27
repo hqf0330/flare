@@ -1,31 +1,15 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.bhcode.flare.connector;
 
 import com.bhcode.flare.common.util.PropUtils;
+import com.bhcode.flare.connector.hbase.HBaseConnector;
 import com.bhcode.flare.connector.jdbc.JdbcConnector;
 import com.bhcode.flare.connector.kafka.KafkaConnector;
-import com.bhcode.flare.connector.hbase.HBaseConnector;
 import com.bhcode.flare.connector.redis.RedisConnector;
+import com.bhcode.flare.core.anno.connector.HBase;
 import com.bhcode.flare.core.anno.connector.Jdbc;
 import com.bhcode.flare.core.anno.connector.Kafka;
-import com.bhcode.flare.core.anno.connector.HBase;
 import com.bhcode.flare.core.anno.connector.Redis;
+import lombok.NoArgsConstructor;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -35,79 +19,68 @@ import java.util.function.BiConsumer;
 /**
  * Flink connectors facade. Concrete connectors live in subpackages.
  */
+@NoArgsConstructor
 public final class FlinkConnectors {
-
-    private FlinkConnectors() {
-        // Utility class
-    }
 
     public static void applyConnectorAnnotations(Class<?> targetClass) {
         Kafka[] kafkaAnnos = targetClass.getAnnotationsByType(Kafka.class);
-        if (kafkaAnnos != null) {
-            for (Kafka kafka : kafkaAnnos) {
-                String prefix = KafkaConnector.kafkaPrefix(kafka.keyNum());
-                setIfNotBlank(prefix + "bootstrap.servers", kafka.brokers());
-                setIfNotBlank(prefix + "topic", kafka.topics());
-                setIfNotBlank(prefix + "group.id", kafka.groupId());
-                setIfNotBlank(prefix + "starting.offsets", kafka.startingOffset());
-                if (kafka.startFromTimestamp() > 0) {
-                    PropUtils.setProperty(prefix + "startFromTimestamp", String.valueOf(kafka.startFromTimestamp()));
-                }
-                if (kafka.config() != null && kafka.config().length > 0) {
-                    for (String conf : kafka.config()) {
-                        if (conf != null && conf.contains("=")) {
-                            String[] kv = conf.split("=", 2);
-                            PropUtils.setProperty(prefix + "props." + kv[0].trim(), kv[1].trim());
-                        }
+        for (Kafka kafka : kafkaAnnos) {
+            String prefix = KafkaConnector.kafkaPrefix(kafka.keyNum());
+            setIfAbsent(prefix + "bootstrap.servers", kafka.brokers());
+            setIfAbsent(prefix + "topic", kafka.topics());
+            setIfAbsent(prefix + "group.id", kafka.groupId());
+            setIfAbsent(prefix + "starting.offsets", kafka.startingOffset());
+            if (kafka.startFromTimestamp() > 0) {
+                setIfAbsent(prefix + "startFromTimestamp", String.valueOf(kafka.startFromTimestamp()));
+            }
+            if (kafka.config() != null) {
+                for (String conf : kafka.config()) {
+                    if (conf != null && conf.contains("=")) {
+                        String[] kv = conf.split("=", 2);
+                        setIfAbsent(prefix + "props." + kv[0].trim(), kv[1].trim());
                     }
                 }
-                setIfNotBlank(prefix + "watermark.strategy", kafka.watermarkStrategy());
-                PropUtils.setProperty(prefix + "watermark.maxOutOfOrderness", String.valueOf(kafka.watermarkMaxOutOfOrderness()));
-                setIfNotBlank(prefix + "watermark.timestampField", kafka.watermarkTimestampField());
             }
+            setIfAbsent(prefix + "watermark.strategy", kafka.watermarkStrategy());
+            setIfAbsent(prefix + "watermark.maxOutOfOrderness", String.valueOf(kafka.watermarkMaxOutOfOrderness()));
+            setIfAbsent(prefix + "watermark.timestampField", kafka.watermarkTimestampField());
         }
 
         Jdbc[] jdbcAnnos = targetClass.getAnnotationsByType(Jdbc.class);
-        if (jdbcAnnos != null) {
-            for (Jdbc jdbc : jdbcAnnos) {
-                String prefix = JdbcConnector.jdbcPrefix(jdbc.keyNum());
-                setIfNotBlank(prefix + "url", jdbc.url());
-                setIfNotBlank(prefix + "user", jdbc.username());
-                setIfNotBlank(prefix + "password", jdbc.password());
-                setIfNotBlank(prefix + "driver", jdbc.driver());
-                setIfNotBlank(prefix + "sql", jdbc.sql());
-                PropUtils.setProperty(prefix + "batch.size", String.valueOf(jdbc.batchSize()));
-                PropUtils.setProperty(prefix + "batch.interval.ms", String.valueOf(jdbc.batchIntervalMs()));
-                PropUtils.setProperty(prefix + "max.retries", String.valueOf(jdbc.maxRetries()));
-                setIfNotBlank(prefix + "upsert.mode", jdbc.upsertMode());
-                setIfNotBlank(prefix + "key.columns", jdbc.keyColumns());
-            }
+        for (Jdbc jdbc : jdbcAnnos) {
+            String prefix = JdbcConnector.jdbcPrefix(jdbc.keyNum());
+            setIfAbsent(prefix + "url", jdbc.url());
+            setIfAbsent(prefix + "user", jdbc.username());
+            setIfAbsent(prefix + "password", jdbc.password());
+            setIfAbsent(prefix + "driver", jdbc.driver());
+            setIfAbsent(prefix + "sql", jdbc.sql());
+            setIfAbsent(prefix + "batch.size", String.valueOf(jdbc.batchSize()));
+            setIfAbsent(prefix + "batch.interval.ms", String.valueOf(jdbc.batchIntervalMs()));
+            setIfAbsent(prefix + "max.retries", String.valueOf(jdbc.maxRetries()));
+            setIfAbsent(prefix + "upsert.mode", jdbc.upsertMode());
+            setIfAbsent(prefix + "key.columns", jdbc.keyColumns());
         }
 
         HBase[] hbaseAnnos = targetClass.getAnnotationsByType(HBase.class);
-        if (hbaseAnnos != null) {
-            for (HBase hbase : hbaseAnnos) {
-                String prefix = HBaseConnector.hbasePrefix(hbase.keyNum());
-                setIfNotBlank(prefix + "zk.quorum", hbase.zkQuorum());
-                setIfNotBlank(prefix + "zk.port", hbase.zkPort());
-                setIfNotBlank(prefix + "znode.parent", hbase.znodeParent());
-                setIfNotBlank(prefix + "table.name", hbase.tableName());
-            }
+        for (HBase hbase : hbaseAnnos) {
+            String prefix = HBaseConnector.hbasePrefix(hbase.keyNum());
+            setIfAbsent(prefix + "zk.quorum", hbase.zkQuorum());
+            setIfAbsent(prefix + "zk.port", hbase.zkPort());
+            setIfAbsent(prefix + "znode.parent", hbase.znodeParent());
+            setIfAbsent(prefix + "table.name", hbase.tableName());
         }
 
         Redis[] redisAnnos = targetClass.getAnnotationsByType(Redis.class);
-        if (redisAnnos != null) {
-            for (Redis redis : redisAnnos) {
-                String prefix = RedisConnector.redisPrefix(redis.keyNum());
-                setIfNotBlank(prefix + "host", redis.host());
-                PropUtils.setProperty(prefix + "port", String.valueOf(redis.port()));
-                setIfNotBlank(prefix + "password", redis.password());
-                PropUtils.setProperty(prefix + "database", String.valueOf(redis.database()));
-                PropUtils.setProperty(prefix + "timeout", String.valueOf(redis.timeout()));
-                PropUtils.setProperty(prefix + "maxTotal", String.valueOf(redis.maxTotal()));
-                PropUtils.setProperty(prefix + "maxIdle", String.valueOf(redis.maxIdle()));
-                PropUtils.setProperty(prefix + "minIdle", String.valueOf(redis.minIdle()));
-            }
+        for (Redis redis : redisAnnos) {
+            String prefix = RedisConnector.redisPrefix(redis.keyNum());
+            setIfAbsent(prefix + "host", redis.host());
+            setIfAbsent(prefix + "port", String.valueOf(redis.port()));
+            setIfAbsent(prefix + "password", redis.password());
+            setIfAbsent(prefix + "database", String.valueOf(redis.database()));
+            setIfAbsent(prefix + "timeout", String.valueOf(redis.timeout()));
+            setIfAbsent(prefix + "maxTotal", String.valueOf(redis.maxTotal()));
+            setIfAbsent(prefix + "maxIdle", String.valueOf(redis.maxIdle()));
+            setIfAbsent(prefix + "minIdle", String.valueOf(redis.minIdle()));
         }
     }
 
@@ -134,6 +107,19 @@ public final class FlinkConnectors {
             int keyNum
     ) {
         JdbcConnector.jdbcSinkFromConf(stream, binder, keyNum);
+    }
+
+    private static void setIfAbsent(String key, String value) {
+        if (key == null || key.trim().isEmpty()) {
+            return;
+        }
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        // 关键：如果配置中已存在，则不覆盖（实现配置覆盖注解）
+        if (PropUtils.getString(key) == null) {
+            PropUtils.setProperty(key, value.trim());
+        }
     }
 
     private static void setIfNotBlank(String key, String value) {

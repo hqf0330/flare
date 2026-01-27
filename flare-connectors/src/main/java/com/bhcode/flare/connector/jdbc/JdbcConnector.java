@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.connector.jdbc.JdbcConnectionOptions;
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
 import org.apache.flink.connector.jdbc.JdbcSink;
-import org.apache.flink.connector.jdbc.JdbcStatementBuilder;
 import org.apache.flink.streaming.api.datastream.DataStream;
 
 import java.lang.reflect.Field;
@@ -185,7 +184,7 @@ public final class JdbcConnector {
 
         stream.addSink(JdbcSink.sink(
                 sql,
-                (ps, t) -> binder.accept(ps, t),
+                binder::accept,
                 execOptions,
                 connOptions
         ));
@@ -194,7 +193,7 @@ public final class JdbcConnector {
     }
 
     /**
-     * 自动化 JDBC Sink (对标 fire)
+     * 自动化 JDBC Sink
      */
     public static <T> void jdbcSink(
             DataStream<T> stream,
@@ -228,7 +227,7 @@ public final class JdbcConnector {
             sql = JdbcUpsertUtils.buildMysqlUpsertSql(sql, finalKeyColumns);
             log.info("JDBC Auto-Sink Upsert Mode [mysql] enabled. Final SQL: {}", sql);
         } else if (finalKeyColumns != null && !finalKeyColumns.isEmpty()) {
-            // 如果代码中传了 keyColumns 但配置没开 upsertMode，默认尝试 mysql upsert (对标 fire 习惯)
+            // 如果代码中传了 keyColumns 但配置没开 upsertMode，默认尝试 mysql upsert
             sql = JdbcUpsertUtils.buildMysqlUpsertSql(sql, finalKeyColumns);
         }
 
@@ -248,6 +247,7 @@ public final class JdbcConnector {
                 .withDriverName(driver == null ? "" : driver)
                 .build();
 
+
         stream.addSink(JdbcSink.sink(
                 finalSql,
                 (ps, t) -> {
@@ -263,7 +263,7 @@ public final class JdbcConnector {
                 },
                 execOptions,
                 connOptions
-        ));
+        )).name("JdbcSink-" + tableName).uid("uid-jdbc-sink-" + tableName + "-" + keyNum);
         
         LineageManager.addLineage("Flink", "JDBC:" + url + "/" + tableName, "SINK");
     }
