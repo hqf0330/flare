@@ -8,6 +8,7 @@ import com.bhcode.flare.connector.FlinkConnectors;
 import com.bhcode.flare.connector.jdbc.JdbcConnector;
 import com.bhcode.flare.connector.jdbc.JdbcParameterBinder;
 import com.bhcode.flare.connector.jdbc.JdbcResultJoiner;
+import com.bhcode.flare.connector.kafka.KafkaConnector;
 import com.bhcode.flare.core.anno.connector.AsyncLookup;
 import com.bhcode.flare.flink.anno.Streaming;
 import com.bhcode.flare.flink.conf.FlareFlinkConf;
@@ -621,6 +622,17 @@ public abstract class FlinkStreaming extends BaseFlink {
 
     public <T> void jdbcSink(DataStream<T> stream, String tableName, String keyColumns, int keyNum) {
         JdbcConnector.jdbcSink(stream, tableName, keyColumns, keyNum);
+    }
+
+    /**
+     * Kafka Sink（自动化 JSON 序列化，对标 fire）
+     */
+    public <T> void kafkaSink(DataStream<T> stream, String topic) {
+        this.kafkaSink(stream, topic, 1);
+    }
+
+    public <T> void kafkaSink(DataStream<T> stream, String topic, int keyNum) {
+        KafkaConnector.kafkaSink(stream, topic, keyNum);
     }
 
     /**

@@ -10,6 +10,24 @@ import java.util.List;
 public class JdbcUpsertUtils {
 
     /**
+     * Convert camelCase to snake_case.
+     */
+    public static String toSnakeCase(String str) {
+        if (str == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) sb.append("_");
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * 根据 Class 的字段自动生成 INSERT SQL
      */
     public static String buildInsertSql(String tableName, Class<?> clazz) {
@@ -18,7 +36,8 @@ public class JdbcUpsertUtils {
         StringBuilder values = new StringBuilder(" VALUES (");
         
         for (int i = 0; i < fields.length; i++) {
-            sql.append(fields[i].getName());
+            // 关键优化：自动将驼峰转为下划线
+            sql.append(toSnakeCase(fields[i].getName()));
             values.append("?");
             if (i < fields.length - 1) {
                 sql.append(", ");

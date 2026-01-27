@@ -214,6 +214,10 @@ public final class JdbcConnector {
         String finalKeyColumns = (keyColumns != null && !keyColumns.isEmpty()) 
                 ? keyColumns 
                 : PropUtils.getString(prefix + "key.columns", "");
+        // 关键优化：将主键列名也转为下划线，以匹配自动生成的 SQL
+        if (!finalKeyColumns.isEmpty()) {
+            finalKeyColumns = JdbcUpsertUtils.toSnakeCase(finalKeyColumns);
+        }
         String upsertMode = PropUtils.getString(prefix + "upsert.mode", "none");
 
         Class<T> clazz = stream.getType().getTypeClass();

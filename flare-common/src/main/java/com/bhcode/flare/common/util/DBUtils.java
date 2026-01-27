@@ -54,8 +54,13 @@ public class DBUtils {
         
         Object[] args = new Object[components.length];
         for (int i = 0; i < components.length; i++) {
-            String name = components[i].getName().toLowerCase();
-            args[i] = rowData.get(name);
+            String name = components[i].getName();
+            // 关键优化：支持 驼峰、下划线、全小写 三种匹配模式
+            Object val = rowData.get(name); // 1. 原名匹配 (camelCase)
+            if (val == null) val = rowData.get(toSnakeCase(name)); // 2. 下划线匹配 (snake_case)
+            if (val == null) val = rowData.get(name.toLowerCase()); // 3. 全小写匹配
+            
+            args[i] = val;
         }
         
         canonical.setAccessible(true);
@@ -77,11 +82,34 @@ public class DBUtils {
         T obj = (T) constructor.newInstance();
         for (Field field : fields) {
             field.setAccessible(true);
-            String name = field.getName().toLowerCase();
-            if (rowData.containsKey(name)) {
-                field.set(obj, rowData.get(name));
+            String name = field.getName();
+            
+            Object val = rowData.get(name);
+            if (val == null) val = rowData.get(toSnakeCase(name));
+            if (val == null) val = rowData.get(name.toLowerCase());
+            
+            if (val != null) {
+                field.set(obj, val);
             }
         }
         return obj;
+    }
+
+    /**
+     * Convert camelCase to snake_case.
+     */
+    private static String toSnakeCase(String str) {
+        if (str == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) sb.append("_");
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }

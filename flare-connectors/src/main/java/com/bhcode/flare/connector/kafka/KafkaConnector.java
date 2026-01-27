@@ -1,12 +1,17 @@
 package com.bhcode.flare.connector.kafka;
 
 import com.bhcode.flare.common.lineage.LineageManager;
+import com.bhcode.flare.common.util.JSONUtils;
 import com.bhcode.flare.common.util.PropUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
+import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.base.DeliveryGuarantee;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
+import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -107,6 +112,56 @@ public final class KafkaConnector {
             int keyNum
     ) {
         return kafkaSourceFromConf(env, String.class, topicOverride, keyNum);
+    }
+
+    /**
+     * Create Kafka sink with automatic JSON serialization (aligned with fire).
+     */
+    public static <T> void kafkaSink(DataStream<T> stream, String topic, int keyNum) {
+        if (stream == null) {
+            throw new IllegalArgumentException("stream is null");
+        }
+        String prefix = kafkaPrefix(keyNum);
+        String bootstrapServers = PropUtils.getString(prefix + "bootstrap.servers");
+        String finalTopic = (topic != null && !topic.trim().isEmpty())
+                ? topic.trim()
+                : PropUtils.getString(prefix + "topic");
+
+        if (bootstrapServers == null || bootstrapServers.trim().isEmpty()) {
+            throw new IllegalStateException(prefix + "bootstrap.servers is required");
+        }
+        if (finalTopic == null || finalTopic.trim().isEmpty()) {
+            throw new IllegalStateException(prefix + "topic is required for sink");
+        }
+
+        Properties extraProps = new Properties();
+        Map<String, String> extra = PropUtils.sliceKeys(prefix + "props.");
+        extra.forEach(extraProps::setProperty);
+
+        // Define serialization: String remains String, others to JSON
+        KafkaRecordSerializationSchema<T> serializer = KafkaRecordSerializationSchema.<T>builder()
+                .setTopic(finalTopic)
+                .setValueSerializationSchema(new SerializationSchema<T>() {
+                    @Override
+                    public byte[] serialize(T element) {
+                        if (element == null) return null;
+                        if (element instanceof String) {
+                            return ((String) element).getBytes();
+                        }
+                        return JSONUtils.toJSONString(element).getBytes();
+                    }
+                })
+                .build();
+
+        KafkaSink<T> sink = KafkaSink.<T>builder()
+                .setBootstrapServers(bootstrapServers)
+                .setRecordSerializer(serializer)
+                .setKafkaProducerConfig(extraProps)
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE) // Default to ALO for performance
+                .build();
+
+        stream.sinkTo(sink).name("kafka-sink-" + finalTopic);
+        LineageManager.addLineage("Flink", "Kafka:" + bootstrapServers + "/" + finalTopic, "SINK");
     }
 
     /**
