@@ -58,6 +58,15 @@ public abstract class BaseFlink extends BaseFlare {
 
         com.bhcode.flare.flink.util.FlinkSingletonFactory.getInstance().setAppName(this.appName);
 
+        // 注册常用 POJO 类以优化序列化性能
+        // getEnv().getConfig().registerPojoType(YourBean.class);
+        
+        // 强制开启 Kryo 序列化作为兜底（可选）
+        // getEnv().getConfig().enableForceKryo();
+        
+        // 禁用 Generic Types 以强制用户使用 POJO 或 Kryo，提高性能
+        // getEnv().getConfig().disableGenericTypes();
+
         log.debug("BaseFlink initialization completed");
     }
     

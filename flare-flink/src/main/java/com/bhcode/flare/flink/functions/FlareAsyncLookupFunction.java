@@ -1,6 +1,7 @@
 package com.bhcode.flare.flink.functions;
 
 import com.bhcode.flare.core.anno.connector.AsyncLookup;
+import com.bhcode.flare.flink.cache.LookupCacheManager;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.apache.flink.streaming.api.functions.async.ResultFuture;
 import org.apache.flink.streaming.api.functions.async.RichAsyncFunction;
 
 import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,7 +24,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 public abstract class FlareAsyncLookupFunction<IN, OUT> extends RichAsyncFunction<IN, OUT> {
 
-    protected transient Cache<IN, OUT> cache;
+    protected transient LookupCacheManager<IN, OUT> cacheManager;
     protected transient ExecutorService executorService;
 
     @Override
@@ -30,20 +32,14 @@ public abstract class FlareAsyncLookupFunction<IN, OUT> extends RichAsyncFunctio
         super.open(parameters);
         
         AsyncLookup anno = this.getClass().getAnnotation(AsyncLookup.class);
-        long cacheSize = 10000;
-        long cacheExpire = 60;
-        java.util.concurrent.TimeUnit unit = java.util.concurrent.TimeUnit.SECONDS;
-
-        if (anno != null) {
-            cacheSize = anno.cacheSize();
-            cacheExpire = anno.cacheExpire();
-            unit = anno.cacheUnit();
+        if (anno == null) {
+            // Try to find annotation on the outer class if this is an anonymous inner class
+            anno = this.getClass().getEnclosingClass() != null ? 
+                   this.getClass().getEnclosingClass().getAnnotation(AsyncLookup.class) : null;
         }
 
-        this.cache = Caffeine.newBuilder()
-                .maximumSize(cacheSize)
-                .expireAfterWrite(cacheExpire, unit)
-                .build();
+        this.cacheManager = new LookupCacheManager<>(anno);
+        this.cacheManager.open();
         
         // Default thread pool for async operations if needed
         this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
@@ -59,27 +55,43 @@ public abstract class FlareAsyncLookupFunction<IN, OUT> extends RichAsyncFunctio
 
     @Override
     public void asyncInvoke(IN input, ResultFuture<OUT> resultFuture) {
-        // 1. Try cache
-        OUT cached = cache.getIfPresent(input);
+        // 1. Try cache (including empty results)
+        Optional<OUT> cached = cacheManager.getIfPresent(input);
         if (cached != null) {
-            resultFuture.complete(Collections.singleton(cached));
+            if (cached.isPresent()) {
+                resultFuture.complete(Collections.singleton(cached.get()));
+            } else {
+                resultFuture.complete(Collections.emptyList());
+            }
             return;
         }
 
         // 2. Async lookup
-        CompletableFuture<OUT> future = lookup(input);
-        future.thenAccept(result -> {
-            if (result != null) {
-                cache.put(input, result);
-                resultFuture.complete(Collections.singleton(result));
-            } else {
+        try {
+            CompletableFuture<OUT> future = lookup(input);
+            if (future == null) {
                 resultFuture.complete(Collections.emptyList());
+                return;
             }
-        }).exceptionally(ex -> {
-            log.error("Async lookup failed for input: {}", input, ex);
-            resultFuture.completeExceptionally(ex);
-            return null;
-        });
+            
+            future.thenAccept(result -> {
+                // Cache the result (even if null to prevent cache penetration)
+                cacheManager.put(input, result);
+                
+                if (result != null) {
+                    resultFuture.complete(Collections.singleton(result));
+                } else {
+                    resultFuture.complete(Collections.emptyList());
+                }
+            }).exceptionally(ex -> {
+                log.error("Async lookup failed for input: {}", input, ex);
+                resultFuture.completeExceptionally(ex);
+                return null;
+            });
+        } catch (Exception e) {
+            log.error("Async lookup invocation failed", e);
+            resultFuture.completeExceptionally(e);
+        }
     }
 
     /**

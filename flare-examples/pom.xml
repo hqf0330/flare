@@ -68,6 +68,10 @@
             <artifactId>flink-clients</artifactId>
             <scope>${maven.scope}</scope>
         </dependency>
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

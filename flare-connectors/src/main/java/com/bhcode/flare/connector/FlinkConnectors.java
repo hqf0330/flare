@@ -21,9 +21,11 @@ import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.connector.jdbc.JdbcConnector;
 import com.bhcode.flare.connector.kafka.KafkaConnector;
 import com.bhcode.flare.connector.hbase.HBaseConnector;
+import com.bhcode.flare.connector.redis.RedisConnector;
 import com.bhcode.flare.core.anno.connector.Jdbc;
 import com.bhcode.flare.core.anno.connector.Kafka;
 import com.bhcode.flare.core.anno.connector.HBase;
+import com.bhcode.flare.core.anno.connector.Redis;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -90,6 +92,21 @@ public final class FlinkConnectors {
                 setIfNotBlank(prefix + "zk.port", hbase.zkPort());
                 setIfNotBlank(prefix + "znode.parent", hbase.znodeParent());
                 setIfNotBlank(prefix + "table.name", hbase.tableName());
+            }
+        }
+
+        Redis[] redisAnnos = targetClass.getAnnotationsByType(Redis.class);
+        if (redisAnnos != null) {
+            for (Redis redis : redisAnnos) {
+                String prefix = RedisConnector.redisPrefix(redis.keyNum());
+                setIfNotBlank(prefix + "host", redis.host());
+                PropUtils.setProperty(prefix + "port", String.valueOf(redis.port()));
+                setIfNotBlank(prefix + "password", redis.password());
+                PropUtils.setProperty(prefix + "database", String.valueOf(redis.database()));
+                PropUtils.setProperty(prefix + "timeout", String.valueOf(redis.timeout()));
+                PropUtils.setProperty(prefix + "maxTotal", String.valueOf(redis.maxTotal()));
+                PropUtils.setProperty(prefix + "maxIdle", String.valueOf(redis.maxIdle()));
+                PropUtils.setProperty(prefix + "minIdle", String.valueOf(redis.minIdle()));
             }
         }
     }

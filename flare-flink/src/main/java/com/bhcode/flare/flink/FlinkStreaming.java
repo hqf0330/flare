@@ -3,8 +3,16 @@ package com.bhcode.flare.flink;
 import com.bhcode.flare.common.enums.JobType;
 import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.connector.FlinkConnectors;
+import com.bhcode.flare.connector.jdbc.JdbcParameterBinder;
+import com.bhcode.flare.connector.jdbc.JdbcResultJoiner;
+import com.bhcode.flare.connector.redis.RedisConnector;
+import redis.clients.jedis.Jedis;
 import com.bhcode.flare.flink.anno.Streaming;
+import com.bhcode.flare.flink.cache.LookupCacheManager;
 import com.bhcode.flare.flink.conf.FlareFlinkConf;
+import com.bhcode.flare.flink.functions.LambdaAsyncJdbcLookupFunction;
+import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction;
+import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction.RedisLookupLogic;
 import com.bhcode.flare.flink.util.FlinkSingletonFactory;
 import com.bhcode.flare.flink.util.FlinkUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +27,10 @@ import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.async.AsyncFunction;
-import org.apache.flink.util.OutputTag;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.util.OutputTag;
 
 import java.sql.PreparedStatement;
 import java.util.Map;
@@ -337,6 +345,57 @@ public abstract class FlinkStreaming extends BaseFlink {
      */
     public void printDirtyData(SingleOutputStreamOperator<?> mainStream) {
         this.getDirtyDataStream(mainStream).print("dirty-data");
+    }
+
+    /**
+     * 异步 JDBC 维表关联（Lambda 风格）
+     * 对标同步查询的体验，同时享有异步 I/O 的性能
+     */
+    public <IN, DIM, OUT> DataStream<OUT> asyncJdbcLookup(
+            DataStream<IN> stream,
+            String sql,
+            Class<DIM> dimClass,
+            JdbcParameterBinder<IN> binder,
+            JdbcResultJoiner<DIM, IN, OUT> joiner) {
+        return this.asyncJdbcLookup(stream, 1, sql, dimClass, binder, joiner);
+    }
+
+    /**
+     * 异步 JDBC 维表关联（Lambda 风格，支持多数据源）
+     */
+    public <IN, DIM, OUT> DataStream<OUT> asyncJdbcLookup(
+            DataStream<IN> stream,
+            int keyNum,
+            String sql,
+            Class<DIM> dimClass,
+            JdbcParameterBinder<IN> binder,
+            JdbcResultJoiner<DIM, IN, OUT> joiner) {
+        
+        LambdaAsyncJdbcLookupFunction<IN, DIM, OUT> asyncFunction = 
+                new LambdaAsyncJdbcLookupFunction<>(keyNum, sql, dimClass, binder, joiner);
+        
+        return this.asyncLookup(stream, asyncFunction);
+    }
+
+    /**
+     * 异步 Redis 维表关联
+     */
+    public <IN, OUT> DataStream<OUT> asyncRedisLookup(
+            DataStream<IN> stream,
+            RedisLookupLogic<IN, OUT> logic) {
+        return this.asyncRedisLookup(stream, 1, logic);
+    }
+
+    /**
+     * 异步 Redis 维表关联（支持多数据源）
+     */
+    public <IN, OUT> DataStream<OUT> asyncRedisLookup(
+            DataStream<IN> stream,
+            int keyNum,
+            RedisLookupLogic<IN, OUT> logic) {
+        LambdaAsyncRedisLookupFunction<IN, OUT> asyncFunction = 
+                new LambdaAsyncRedisLookupFunction<>(keyNum, logic);
+        return this.asyncLookup(stream, asyncFunction);
     }
 
     /**

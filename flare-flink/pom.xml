@@ -18,6 +18,11 @@
             <artifactId>commons-io</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+        </dependency>
+
         <!-- Flare Core -->
         <dependency>
             <groupId>com.bhcode.flare</groupId>

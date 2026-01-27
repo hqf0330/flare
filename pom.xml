@@ -42,6 +42,8 @@
         <jackson.version>2.15.3</jackson.version>
         <commons-io.version>2.15.1</commons-io.version>
         <caffeine.version>3.1.8</caffeine.version>
+        <hikaricp.version>5.1.0</hikaricp.version>
+        <jedis.version>5.1.0</jedis.version>
         
         <!-- 核心优化：开发阶段设为 compile，支持依赖传递，让业务模块开箱即用 -->
         <maven.scope>compile</maven.scope>
@@ -83,6 +85,17 @@
                 <groupId>com.github.ben-manes.caffeine</groupId>
                 <artifactId>caffeine</artifactId>
                 <version>${caffeine.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.zaxxer</groupId>
+                <artifactId>HikariCP</artifactId>
+                <version>${hikaricp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>redis.clients</groupId>
+                <artifactId>jedis</artifactId>
+                <version>${jedis.version}</version>
             </dependency>
 
             <!-- Lombok -->
