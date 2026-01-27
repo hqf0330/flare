@@ -5,6 +5,7 @@ import com.bhcode.flare.common.util.FlareUtils;
 import com.bhcode.flare.common.util.JSONUtils;
 import com.bhcode.flare.common.util.PropUtils;
 import com.bhcode.flare.connector.FlinkConnectors;
+import com.bhcode.flare.connector.jdbc.JdbcConnector;
 import com.bhcode.flare.connector.jdbc.JdbcParameterBinder;
 import com.bhcode.flare.connector.jdbc.JdbcResultJoiner;
 import com.bhcode.flare.core.anno.connector.AsyncLookup;
@@ -604,6 +605,22 @@ public abstract class FlinkStreaming extends BaseFlink {
             BiConsumer<PreparedStatement, T> binder,
             int keyNum) {
         FlinkConnectors.jdbcSinkFromConf(stream, binder, keyNum);
+    }
+
+    /**
+     * 自动化 JDBC Sink（对标 fire，零代码落库）
+     * 自动根据 Record 字段生成 SQL 并绑定参数
+     */
+    public <T> void jdbcSink(DataStream<T> stream, String tableName) {
+        this.jdbcSink(stream, tableName, null, 1);
+    }
+
+    public <T> void jdbcSink(DataStream<T> stream, String tableName, String keyColumns) {
+        this.jdbcSink(stream, tableName, keyColumns, 1);
+    }
+
+    public <T> void jdbcSink(DataStream<T> stream, String tableName, String keyColumns, int keyNum) {
+        JdbcConnector.jdbcSink(stream, tableName, keyColumns, keyNum);
     }
 
     /**

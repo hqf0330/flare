@@ -2,8 +2,32 @@ package com.bhcode.flare.connector.jdbc;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
 @Slf4j
 public class JdbcUpsertUtils {
+
+    /**
+     * 根据 Class 的字段自动生成 INSERT SQL
+     */
+    public static String buildInsertSql(String tableName, Class<?> clazz) {
+        Field[] fields = clazz.getDeclaredFields();
+        StringBuilder sql = new StringBuilder("INSERT INTO ").append(tableName).append(" (");
+        StringBuilder values = new StringBuilder(" VALUES (");
+        
+        for (int i = 0; i < fields.length; i++) {
+            sql.append(fields[i].getName());
+            values.append("?");
+            if (i < fields.length - 1) {
+                sql.append(", ");
+                values.append(", ");
+            }
+        }
+        sql.append(")").append(values).append(")");
+        return sql.toString();
+    }
 
     /**
      * 为 MySQL 生成 ON DUPLICATE KEY UPDATE 语句

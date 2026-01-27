@@ -12,6 +12,7 @@ import org.apache.flink.connector.jdbc.JdbcSink;
 import org.apache.flink.connector.jdbc.JdbcStatementBuilder;
 import org.apache.flink.streaming.api.datastream.DataStream;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -25,6 +26,7 @@ import java.util.function.BiConsumer;
 public final class JdbcConnector {
 
     private static final Map<Integer, HikariDataSource> dataSources = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Field[]> FIELDS_CACHE = new ConcurrentHashMap<>();
 
     private JdbcConnector() {
         // Utility class
@@ -183,17 +185,83 @@ public final class JdbcConnector {
 
         stream.addSink(JdbcSink.sink(
                 sql,
-                new JdbcStatementBuilder<T>() {
-                    @Override
-                    public void accept(PreparedStatement ps, T t) throws SQLException {
-                        binder.accept(ps, t);
+                (ps, t) -> binder.accept(ps, t),
+                execOptions,
+                connOptions
+        ));
+        
+        LineageManager.addLineage("Flink", "JDBC:" + url, "SINK");
+    }
+
+    /**
+     * 自动化 JDBC Sink (对标 fire)
+     */
+    public static <T> void jdbcSink(
+            DataStream<T> stream,
+            String tableName,
+            String keyColumns,
+            int keyNum
+    ) {
+        if (stream == null || tableName == null) return;
+
+        String prefix = jdbcPrefix(keyNum);
+        String url = PropUtils.getString(prefix + "url");
+        String user = PropUtils.getString(prefix + "user", "");
+        String password = PropUtils.getString(prefix + "password", "");
+        String driver = PropUtils.getString(prefix + "driver", "");
+        
+        // 优先使用注解/配置中的 upsertMode 和 keyColumns
+        String finalKeyColumns = (keyColumns != null && !keyColumns.isEmpty()) 
+                ? keyColumns 
+                : PropUtils.getString(prefix + "key.columns", "");
+        String upsertMode = PropUtils.getString(prefix + "upsert.mode", "none");
+
+        Class<T> clazz = stream.getType().getTypeClass();
+        String sql = JdbcUpsertUtils.buildInsertSql(tableName, clazz);
+        
+        // 处理 Upsert 逻辑
+        if ("mysql".equalsIgnoreCase(upsertMode) && !finalKeyColumns.isEmpty()) {
+            sql = JdbcUpsertUtils.buildMysqlUpsertSql(sql, finalKeyColumns);
+            log.info("JDBC Auto-Sink Upsert Mode [mysql] enabled. Final SQL: {}", sql);
+        } else if (finalKeyColumns != null && !finalKeyColumns.isEmpty()) {
+            // 如果代码中传了 keyColumns 但配置没开 upsertMode，默认尝试 mysql upsert (对标 fire 习惯)
+            sql = JdbcUpsertUtils.buildMysqlUpsertSql(sql, finalKeyColumns);
+        }
+
+        final String finalSql = sql;
+        log.info("Auto-generated JDBC Sink SQL: {}", finalSql);
+
+        JdbcExecutionOptions execOptions = JdbcExecutionOptions.builder()
+                .withBatchSize(PropUtils.getInt(prefix + "batch.size", 500))
+                .withBatchIntervalMs(PropUtils.getLong(prefix + "batch.interval.ms", 1000))
+                .withMaxRetries(PropUtils.getInt(prefix + "max.retries", 3))
+                .build();
+
+        JdbcConnectionOptions connOptions = new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+                .withUrl(url)
+                .withUsername(user)
+                .withPassword(password)
+                .withDriverName(driver == null ? "" : driver)
+                .build();
+
+        stream.addSink(JdbcSink.sink(
+                finalSql,
+                (ps, t) -> {
+                    try {
+                        Field[] fields = FIELDS_CACHE.computeIfAbsent(t.getClass(), Class::getDeclaredFields);
+                        for (int i = 0; i < fields.length; i++) {
+                            fields[i].setAccessible(true);
+                            ps.setObject(i + 1, fields[i].get(t));
+                        }
+                    } catch (IllegalAccessException e) {
+                        throw new SQLException("Failed to bind parameters via reflection", e);
                     }
                 },
                 execOptions,
                 connOptions
         ));
         
-        LineageManager.addLineage("Flink", "JDBC:" + url, "SINK");
+        LineageManager.addLineage("Flink", "JDBC:" + url + "/" + tableName, "SINK");
     }
 
     private static void validateKeyNum(int keyNum) {
