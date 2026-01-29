@@ -7,6 +7,8 @@ import com.bhcode.flare.common.util.FlareUtils;
 import com.bhcode.flare.common.util.ParameterTool;
 import lombok.Getter;
 import lombok.Setter;
+import com.bhcode.flare.core.anno.connector.After;
+import com.bhcode.flare.core.anno.connector.Before;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
@@ -169,7 +171,7 @@ public abstract class BaseFlare {
      */
     public void before(String[] args) {
         // 生命周期方法，在init之前被调用
-        AnnoManager.lifeCycleAnno(this, com.bhcode.flare.core.anno.connector.Before.class);
+        AnnoManager.lifeCycleAnno(this, Before.class);
         log.debug("Before initialization");
     }
 
@@ -229,7 +231,7 @@ public abstract class BaseFlare {
      * 注：该方法会在进行destroy之前自动被系统调用
      */
     public void after() {
-        AnnoManager.lifeCycleAnno(this, com.bhcode.flare.core.anno.connector.After.class);
+        AnnoManager.lifeCycleAnno(this, After.class);
         log.debug("After processing");
     }
 

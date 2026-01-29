@@ -21,7 +21,7 @@ public class DBUtils {
     private static final Map<Class<?>, RecordComponent[]> RECORD_COMPONENTS_CACHE = new ConcurrentHashMap<>();
 
     /**
-     * Convert ResultSet to a list of objects (supports both POJOs and Records).
+     * Convert ResultSet to a list of objects (supports both POJOs and Records, and nested mapping).
      */
     public static <T> List<T> resultSetToBeanList(ResultSet rs, Class<T> clazz) throws Exception {
         List<T> list = new ArrayList<>();
@@ -31,7 +31,8 @@ public class DBUtils {
         while (rs.next()) {
             Map<String, Object> rowData = new HashMap<>();
             for (int i = 1; i <= columnCount; i++) {
-                rowData.put(metaData.getColumnLabel(i).toLowerCase(), rs.getObject(i));
+                // Use column label (alias) as the key
+                rowData.put(metaData.getColumnLabel(i), rs.getObject(i));
             }
 
             if (clazz.isRecord()) {
@@ -55,11 +56,10 @@ public class DBUtils {
         Object[] args = new Object[components.length];
         for (int i = 0; i < components.length; i++) {
             String name = components[i].getName();
-            // 关键优化：支持 驼峰、下划线、全小写 三种匹配模式
-            Object val = rowData.get(name); // 1. 原名匹配 (camelCase)
-            if (val == null) val = rowData.get(toSnakeCase(name)); // 2. 下划线匹配 (snake_case)
-            if (val == null) val = rowData.get(name.toLowerCase()); // 3. 全小写匹配
+            Class<?> type = components[i].getType();
             
+            // Try direct match, snake_case match, and nested match
+            Object val = getValue(rowData, name, type);
             args[i] = val;
         }
         
@@ -67,6 +67,7 @@ public class DBUtils {
         return (T) canonical.newInstance(args);
     }
 
+    @SuppressWarnings("unchecked")
     private static <T> T mapToPojo(Map<String, Object> rowData, Class<T> clazz) throws Exception {
         Constructor<?> constructor = CONSTRUCTOR_CACHE.computeIfAbsent(clazz, k -> {
             try {
@@ -83,11 +84,9 @@ public class DBUtils {
         for (Field field : fields) {
             field.setAccessible(true);
             String name = field.getName();
+            Class<?> type = field.getType();
             
-            Object val = rowData.get(name);
-            if (val == null) val = rowData.get(toSnakeCase(name));
-            if (val == null) val = rowData.get(name.toLowerCase());
-            
+            Object val = getValue(rowData, name, type);
             if (val != null) {
                 field.set(obj, val);
             }
@@ -96,9 +95,66 @@ public class DBUtils {
     }
 
     /**
+     * Get value from rowData with support for camelCase, snake_case, and nested structures.
+     */
+    private static Object getValue(Map<String, Object> rowData, String name, Class<?> type) throws Exception {
+        // 1. Direct match
+        if (rowData.containsKey(name)) return rowData.get(name);
+        
+        // 2. snake_case match
+        String snakeName = toSnakeCase(name);
+        if (rowData.containsKey(snakeName)) return rowData.get(snakeName);
+        
+        // 3. Nested match (e.g., field "user" of type UserRecord, looking for "user.xxx" or "user_xxx" in rowData)
+        if (!isSimpleType(type)) {
+            Map<String, Object> nestedData = new HashMap<>();
+            String prefix1 = name + ".";
+            String prefix2 = name + "_";
+            String prefix3 = snakeName + "_";
+            
+            for (Map.Entry<String, Object> entry : rowData.entrySet()) {
+                String key = entry.getKey();
+                if (key.startsWith(prefix1)) {
+                    nestedData.put(key.substring(prefix1.length()), entry.getValue());
+                } else if (key.startsWith(prefix2)) {
+                    nestedData.put(key.substring(prefix2.length()), entry.getValue());
+                } else if (key.startsWith(prefix3)) {
+                    nestedData.put(key.substring(prefix3.length()), entry.getValue());
+                }
+            }
+            
+            if (!nestedData.isEmpty()) {
+                if (type.isRecord()) {
+                    return mapToRecord(nestedData, (Class) type);
+                } else {
+                    return mapToPojo(nestedData, (Class) type);
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private static boolean isSimpleType(Class<?> type) {
+        return type.isPrimitive() || 
+               type == String.class || 
+               type == Integer.class || 
+               type == Long.class || 
+               type == Double.class || 
+               type == Float.class || 
+               type == Boolean.class || 
+               type == Short.class || 
+               type == Byte.class || 
+               type == java.math.BigDecimal.class ||
+               type == java.sql.Date.class ||
+               type == java.sql.Timestamp.class ||
+               type == java.util.Date.class;
+    }
+
+    /**
      * Convert camelCase to snake_case.
      */
-    private static String toSnakeCase(String str) {
+    public static String toSnakeCase(String str) {
         if (str == null) return null;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < str.length(); i++) {
