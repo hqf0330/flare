@@ -19,17 +19,20 @@ package com.bhcode.flare.flink;
 
 import com.bhcode.flare.common.enums.JobType;
 import com.bhcode.flare.flink.anno.Streaming;
+import com.bhcode.flare.flink.conf.FlareFlinkConf;
+import com.bhcode.flare.common.util.PropUtils;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -73,6 +76,10 @@ public class FlinkStreamingTest {
     @Before
     public void setUp() {
         flinkStreaming = new TestFlinkStreaming();
+        // 当前项目范围：默认不启用 TableEnvironment（Flink SQL 不在本阶段范围内）
+        PropUtils.setProperty(FlareFlinkConf.FLINK_TABLE_ENV_ENABLE, "false");
+        // 默认开启自动启动，单测按需覆盖
+        PropUtils.setProperty(FlareFlinkConf.FLINK_JOB_AUTO_START, "true");
     }
 
     @After
@@ -100,29 +107,25 @@ public class FlinkStreamingTest {
     }
 
     @Test
-    @Ignore("需要完整的 Flink Table Planner 环境，暂时跳过")
     public void testCreateContext() {
-        // 测试上下文创建
-        // 注意：此测试需要完整的 Flink Table Planner 环境
+        // 在不启用 TableEnvironment 的默认范围下，仍需正确创建 StreamExecutionEnvironment
         assertFalse(flinkStreaming.isContextCreated());
 
-        flinkStreaming.init(null, null);
+        flinkStreaming.createContext(new Configuration());
 
         assertTrue(flinkStreaming.isContextCreated());
         assertNotNull("StreamExecutionEnvironment 不应为 null", flinkStreaming.getEnv());
-        assertNotNull("StreamTableEnvironment 不应为 null", flinkStreaming.getTableEnv());
+        assertNull("默认应不初始化 StreamTableEnvironment", flinkStreaming.getTableEnv());
     }
 
     @Test
-    @Ignore("需要完整的 Flink Table Planner 环境，暂时跳过")
     public void testFireAlias() {
-        // 测试 fire 别名
-        // 注意：此测试需要完整的 Flink Table Planner 环境
-        flinkStreaming.init(null, null);
+        // 在 createContext 后，getEnv() 应可直接使用
+        flinkStreaming.createContext(new Configuration());
 
         StreamExecutionEnvironment env = flinkStreaming.getEnv();
-        assertNotNull("fire() 方法应返回非 null 的 StreamExecutionEnvironment", env);
-        assertEquals("fire() 应返回与 getEnv() 相同的实例",
+        assertNotNull("getEnv() 应返回非 null 的 StreamExecutionEnvironment", env);
+        assertEquals("同一次创建应返回同一个 env 实例",
                 flinkStreaming.getEnv(), env);
     }
 
@@ -137,13 +140,12 @@ public class FlinkStreamingTest {
     }
 
     @Test
-    @Ignore("需要完整的 Flink Table Planner 环境，暂时跳过")
     public void testProcessCalled() {
-        // 测试 process 方法是否被调用
-        // 注意：此测试需要完整的 Flink Table Planner 环境
+        // 关闭 auto start，避免触发 env.execute，专注验证 init -> processAll 链路
+        PropUtils.setProperty(FlareFlinkConf.FLINK_JOB_AUTO_START, "false");
         assertFalse(flinkStreaming.isProcessCalled());
 
-        flinkStreaming.init(null, null);
+        flinkStreaming.init(new Configuration(), null);
 
         // process() 会在 processAll() 中被调用
         assertTrue("process() 方法应该被调用", flinkStreaming.isProcessCalled());
@@ -158,24 +160,11 @@ public class FlinkStreamingTest {
     }
 
     @Test
-    @Ignore("需要完整的 Flink Table Planner 环境，暂时跳过")
     public void testSqlMethods() {
-        // 测试 SQL 相关方法
-        // 注意：此测试需要完整的 Flink Table Planner 环境
-        flinkStreaming.init(null, null);
+        // 当前范围下默认不初始化 TableEnvironment，SQL 入口应给出清晰错误
+        flinkStreaming.createContext(new Configuration());
 
-        // 测试 sql() 方法（应该不抛出异常）
-        try {
-            flinkStreaming.sql("CREATE TABLE test_table (id INT) WITH ('connector' = 'datagen')");
-        } catch (Exception e) {
-            // 在测试环境中可能会失败，这是正常的
-        }
-
-        // 测试 sqlQuery() 方法
-        try {
-            flinkStreaming.sqlQuery("SELECT 1");
-        } catch (Exception e) {
-            // 在测试环境中可能会失败，这是正常的
-        }
+        assertThrows(IllegalStateException.class, () -> flinkStreaming.sql("SELECT 1"));
+        assertThrows(IllegalStateException.class, () -> flinkStreaming.sqlQuery("SELECT 1"));
     }
 }

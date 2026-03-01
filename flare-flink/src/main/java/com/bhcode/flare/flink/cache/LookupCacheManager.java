@@ -66,7 +66,7 @@ public class LookupCacheManager<K, V> implements Serializable {
     }
 
     /**
-     * For async usage: get from cache or return null if miss.
+     * For async usage: get from cache or return null if missed.
      */
     public Optional<V> getIfPresent(K key) {
         return cache != null ? cache.getIfPresent(key) : null;
