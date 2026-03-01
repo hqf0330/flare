@@ -1,11 +1,25 @@
 # Flare 框架迭代计划 (Roadmap)
 
-本文档旨在规划 Flare 框架的后续迭代方向，重点参考 `fire` 框架的成熟特性，补齐 Flare 在 Flink JAR 任务开发维度的生产级能力。
+本文档旨在规划 Flare 框架的后续迭代方向，重点参考 `fire` 框架的成熟特性，补齐 Flare 在 **Flink DataStream JAR** 任务开发维度的生产级能力。
 
 ---
 
 ## 🎯 核心目标
-将 Flare 打造为 **Java 17 + Flink 1.19** 时代下，最符合生产实战、性能最优、治理最全的 Flink 开发脚手架。
+将 Flare 打造为 **Java 17 + Flink 1.19** 时代下，最符合生产实战、性能最优、治理最全的 **DataStream JAR 开发脚手架**。
+
+---
+
+## 📌 范围约束（当前版本）
+
+### In Scope
+*   面向 Flink DataStream 程序开发与 JAR 交付。
+*   注解驱动配置（`@Streaming/@Kafka/@Jdbc/@Redis/@AsyncLookup`）。
+*   连接器封装、异步维表、脏数据治理、稳定性与可观测性增强。
+
+### Out of Scope（暂缓）
+*   Flink SQL 作业编排能力。
+*   SQL UDF 自动注册链路。
+*   围绕 SQL/Table 的平台化能力建设。
 
 ---
 
@@ -65,15 +79,22 @@
 3.  **运行时动态调优**
     *   [ ] 预留配置中心接口，支持在不重启任务的情况下修改部分参数（如并行度、TTL）。
 
+4.  **Golden Path 工具链（Starter + Doctor）**
+    *   [x] 提供 `flare-starter.sh`：从模板快速生成 DataStream Job 骨架。
+    *   [x] 提供 `flare-doctor.sh`：在提交前做注解与配置预检。
+    *   [x] 定义稳定规则码与退出码契约（见 `docs/plans/doctor-rule-catalog.md`）。
+    *   [x] 提供 `scripts/verify-golden-path.sh` 一键烟测脚本。
+
 ---
 
-### 第四阶段：生态与高级特性 (P2)
-**目标：向全能型框架进化。**
+### 第四阶段：非目标能力（暂缓）(Backlog)
+**说明：以下能力暂不作为当前版本交付目标。**
 
-1.  **自动化 UDF 注册**
-    *   [ ] 支持自动扫描指定 Package 下的类并注册为 Flink SQL UDF。
+1.  **Flink SQL 相关能力**
+    *   [ ] SQL 作业编排与模板化。
+    *   [ ] 自动化 UDF 注册。
 
-2.  **轻量级 REST 监控接口**
+2.  **扩展运维能力**
     *   [ ] 在任务内部集成轻量级 HTTP 服务，支持查询 `metrics`、`lineage` 和 `config`。
 
 ---
@@ -86,4 +107,4 @@
 5.  **FlareTestBase** (已完成)
 
 ---
-*最后更新时间：2026-01-27*
+*最后更新时间：2026-03-01*
