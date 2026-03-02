@@ -4,6 +4,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class StarterCli {
@@ -52,19 +53,29 @@ public final class StarterCli {
                 err.println("Unsupported template: " + cliArgs.template);
                 return 2;
             }
+            if (!isValidArtifactId(cliArgs.artifactId)) {
+                err.println("Invalid artifact id: " + cliArgs.artifactId);
+                return 2;
+            }
 
             Path outRoot = Path.of(cliArgs.outDir);
             String packageName = cliArgs.packageName;
             String packagePath = packageName.replace('.', '/');
-            Map<String, String> placeholders = Map.of(
-                    "PACKAGE", packageName,
-                    "JOB_NAME", cliArgs.jobName
-            );
+            String artifactId = isBlank(cliArgs.artifactId) ? toKebabCase(cliArgs.jobName) : cliArgs.artifactId.trim();
+            String flareVersion = isBlank(cliArgs.flareVersion) ? detectFlareVersion() : cliArgs.flareVersion.trim();
+
+            Map<String, String> placeholders = new LinkedHashMap<>();
+            placeholders.put("PACKAGE", packageName);
+            placeholders.put("JOB_NAME", cliArgs.jobName);
+            placeholders.put("GROUP_ID", packageName);
+            placeholders.put("ARTIFACT_ID", artifactId);
+            placeholders.put("FLARE_VERSION", flareVersion);
 
             TemplateRenderer renderer = new TemplateRenderer();
             writeJobFile(outRoot, cliArgs.template, cliArgs.jobName, packagePath, placeholders, renderer);
             writePropertiesFile(outRoot, placeholders, renderer);
-            writeReadme(outRoot, cliArgs.template, cliArgs.jobName, packageName);
+            writePomFile(outRoot, placeholders, renderer);
+            writeReadme(outRoot, cliArgs.template, cliArgs.jobName, packageName, artifactId);
             out.println("Starter files generated at: " + outRoot.toAbsolutePath());
             return 0;
         } catch (IllegalArgumentException e) {
@@ -100,10 +111,21 @@ public final class StarterCli {
         Files.writeString(confFile, content, StandardCharsets.UTF_8);
     }
 
+    private static void writePomFile(Path outRoot,
+                                     Map<String, String> placeholders,
+                                     TemplateRenderer renderer) throws Exception {
+        String templatePath = "/starter/templates/common/pom.xml.tpl";
+        String content = renderer.renderClasspathTemplate(templatePath, placeholders);
+        Path pomFile = outRoot.resolve("pom.xml");
+        Files.createDirectories(pomFile.getParent());
+        Files.writeString(pomFile, content, StandardCharsets.UTF_8);
+    }
+
     private static void writeReadme(Path outRoot,
                                     String template,
                                     String jobName,
-                                    String packageName) throws Exception {
+                                    String packageName,
+                                    String artifactId) throws Exception {
         String readme = """
                 # Flare Starter Output
                 
@@ -111,11 +133,12 @@ public final class StarterCli {
                 Job Class: %s.%s
                 
                 ## Quick Run
-                1. Put this directory into your business module.
-                2. Keep `flink-streaming.properties` aligned with your env.
-                3. Start with:
-                   `java -cp <your-jar> %s.%s`
-                """.formatted(template, packageName, jobName, packageName, jobName);
+                1. Keep `flink-streaming.properties` aligned with your env.
+                2. Package:
+                   `mvn -DskipTests clean package`
+                3. Submit:
+                   `flink run -c %s.%s target/%s-*-all.jar`
+                """.formatted(template, packageName, jobName, packageName, jobName, artifactId);
         Path readmeFile = outRoot.resolve("README-run.md");
         Files.createDirectories(readmeFile.getParent());
         Files.writeString(readmeFile, readme, StandardCharsets.UTF_8);
@@ -144,8 +167,62 @@ public final class StarterCli {
         return true;
     }
 
+    private static boolean isValidArtifactId(String artifactId) {
+        if (isBlank(artifactId)) {
+            return true;
+        }
+        String value = artifactId.trim();
+        if (value.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9')
+                    || c == '-'
+                    || c == '.';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String toKebabCase(String value) {
+        if (isBlank(value)) {
+            return "flare-job";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) {
+                    sb.append('-');
+                }
+                sb.append(Character.toLowerCase(c));
+            } else if (Character.isLetterOrDigit(c)) {
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append('-');
+            }
+        }
+        String result = sb.toString();
+        while (result.contains("--")) {
+            result = result.replace("--", "-");
+        }
+        return result.replaceAll("^-|-$", "");
+    }
+
+    private static String detectFlareVersion() {
+        Package pkg = StarterCli.class.getPackage();
+        if (pkg != null && !isBlank(pkg.getImplementationVersion())) {
+            return pkg.getImplementationVersion();
+        }
+        return "1.0-SNAPSHOT";
+    }
+
     private static String usage() {
-        return "Usage: flare-starter --template <name> --job <ClassName> --out <dir> [--package <java.package>]";
+        return "Usage: flare-starter --template <name> --job <ClassName> --out <dir> [--package <java.package>] [--artifact <maven-artifact-id>] [--flare-version <version>]";
     }
 
     static final class CliArgs {
@@ -153,24 +230,36 @@ public final class StarterCli {
         private final String jobName;
         private final String outDir;
         private final String packageName;
+        private final String artifactId;
+        private final String flareVersion;
         private final boolean help;
 
-        private CliArgs(String template, String jobName, String outDir, String packageName, boolean help) {
+        private CliArgs(String template,
+                        String jobName,
+                        String outDir,
+                        String packageName,
+                        String artifactId,
+                        String flareVersion,
+                        boolean help) {
             this.template = template;
             this.jobName = jobName;
             this.outDir = outDir;
             this.packageName = packageName;
+            this.artifactId = artifactId;
+            this.flareVersion = flareVersion;
             this.help = help;
         }
 
         static CliArgs parse(String[] args) {
             if (args == null || args.length == 0) {
-                return new CliArgs(null, null, null, "com.example", false);
+                return new CliArgs(null, null, null, "com.example", null, null, false);
             }
             String template = null;
             String job = null;
             String out = null;
             String packageName = "com.example";
+            String artifactId = null;
+            String flareVersion = null;
             boolean help = false;
             for (int i = 0; i < args.length; i++) {
                 String arg = args[i];
@@ -188,11 +277,17 @@ public final class StarterCli {
                 } else if ("--package".equals(arg)) {
                     packageName = nextValue("--package", args, i);
                     i++;
+                } else if ("--artifact".equals(arg)) {
+                    artifactId = nextValue("--artifact", args, i);
+                    i++;
+                } else if ("--flare-version".equals(arg)) {
+                    flareVersion = nextValue("--flare-version", args, i);
+                    i++;
                 } else {
                     throw new IllegalArgumentException("Unknown argument: " + arg);
                 }
             }
-            return new CliArgs(template, job, out, packageName, help);
+            return new CliArgs(template, job, out, packageName, artifactId, flareVersion, help);
         }
 
         private static String nextValue(String option, String[] args, int index) {

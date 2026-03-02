@@ -19,10 +19,16 @@ public class StarterCliTest {
         Assert.assertEquals(0, code);
         Assert.assertTrue(Files.exists(out.resolve("src/main/java/com/example/DemoJob.java")));
         Assert.assertTrue(Files.exists(out.resolve("src/main/resources/flink-streaming.properties")));
+        Assert.assertTrue(Files.exists(out.resolve("pom.xml")));
         Assert.assertTrue(Files.exists(out.resolve("README-run.md")));
         String conf = Files.readString(out.resolve("src/main/resources/flink-streaming.properties"));
+        String pom = Files.readString(out.resolve("pom.xml"));
+        String readme = Files.readString(out.resolve("README-run.md"));
         Assert.assertTrue(conf.contains("flink.job.auto.start=true"));
         Assert.assertFalse(conf.contains("flink.job.autoStart=true"));
+        Assert.assertTrue(pom.contains("<artifactId>demo-job</artifactId>"));
+        Assert.assertTrue(pom.contains("<artifactId>flare-flink</artifactId>"));
+        Assert.assertTrue(readme.contains("mvn -DskipTests clean package"));
     }
 
     @Test
@@ -47,5 +53,19 @@ public class StarterCliTest {
                 "--out", "/tmp/not-used"
         });
         Assert.assertNotEquals(0, code);
+    }
+
+    @Test
+    public void shouldUseCustomArtifactIdWhenProvided() throws Exception {
+        Path out = Files.createTempDirectory("starter-test-custom-artifact");
+        int code = StarterCli.run(new String[]{
+                "--template", "kafka-process-print",
+                "--job", "DemoJob",
+                "--artifact", "orders-stream-job",
+                "--out", out.toString()
+        });
+        Assert.assertEquals(0, code);
+        String pom = Files.readString(out.resolve("pom.xml"));
+        Assert.assertTrue(pom.contains("<artifactId>orders-stream-job</artifactId>"));
     }
 }
