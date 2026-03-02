@@ -1,6 +1,7 @@
 package com.bhcode.flare.flink.doctor;
 
 import com.bhcode.flare.flink.anno.Streaming;
+import com.bhcode.flare.flink.FlinkStreaming;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -13,7 +14,15 @@ public class DoctorCliTest {
     }
 
     @Streaming(parallelism = 1, interval = 10)
-    static class ValidJob {
+    public static class ValidJob extends FlinkStreaming {
+        @Override
+        public void process() {
+            // no-op
+        }
+    }
+
+    @Streaming(parallelism = 1, interval = 10)
+    static class NonFlinkStreamingAnnotatedJob {
     }
 
     @Test
@@ -30,6 +39,14 @@ public class DoctorCliTest {
                 "--job", ValidJob.class.getName()
         });
         Assert.assertEquals(0, code);
+    }
+
+    @Test
+    public void shouldReturnNonZeroWhenJobNotFlinkStreaming() {
+        int code = DoctorCli.run(new String[]{
+                "--job", NonFlinkStreamingAnnotatedJob.class.getName()
+        });
+        Assert.assertNotEquals(0, code);
     }
 
     @Test

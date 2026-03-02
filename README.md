@@ -96,6 +96,8 @@ public class MyJob extends FlinkStreaming {
 * `src/main/java/com/example/<Job>.java`
 * `src/main/resources/flink-streaming.properties`
 * `pom.xml`（可直接 `mvn package` 产出提交包）
+* `run-local.sh`（本地打包+运行）
+* `submit.sh`（打包后 `flink run` 提交）
 * `README-run.md`
 
 ### 2. 运行预检（Doctor）

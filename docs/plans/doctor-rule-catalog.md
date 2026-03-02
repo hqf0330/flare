@@ -8,6 +8,8 @@
 |---|---|---|---|
 | `DR-000` | Job class null | 输入 job class 为空 | 传入有效的全限定类名 |
 | `DR-001` | Missing `@Streaming` | 任务类未标注 `@Streaming` | 在任务类上添加 `@Streaming` |
+| `DR-041` | Job class type invalid | 任务类未继承 `FlinkStreaming` | 让任务类继承 `com.bhcode.flare.flink.FlinkStreaming` |
+| `DR-042` | Job class is abstract | 任务类是抽象类，无法直接提交 | 改为具体类并实现 `process()` |
 | `DR-011` | Duplicate connector `keyNum` | 同一类连接器注解 `keyNum` 重复 | 调整为唯一 `keyNum` |
 | `DR-101` | Kafka brokers missing | `@Kafka.brokers` 为空 | 配置 `@Kafka(brokers=...)` |
 | `DR-102` | Kafka topics missing | `@Kafka.topics` 为空 | 配置 `@Kafka(topics=...)` |

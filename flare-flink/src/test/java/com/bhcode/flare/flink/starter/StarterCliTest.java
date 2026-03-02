@@ -20,15 +20,24 @@ public class StarterCliTest {
         Assert.assertTrue(Files.exists(out.resolve("src/main/java/com/example/DemoJob.java")));
         Assert.assertTrue(Files.exists(out.resolve("src/main/resources/flink-streaming.properties")));
         Assert.assertTrue(Files.exists(out.resolve("pom.xml")));
+        Assert.assertTrue(Files.exists(out.resolve("run-local.sh")));
+        Assert.assertTrue(Files.exists(out.resolve("submit.sh")));
         Assert.assertTrue(Files.exists(out.resolve("README-run.md")));
         String conf = Files.readString(out.resolve("src/main/resources/flink-streaming.properties"));
         String pom = Files.readString(out.resolve("pom.xml"));
+        String runScript = Files.readString(out.resolve("run-local.sh"));
+        String submitScript = Files.readString(out.resolve("submit.sh"));
         String readme = Files.readString(out.resolve("README-run.md"));
         Assert.assertTrue(conf.contains("flink.job.auto.start=true"));
         Assert.assertFalse(conf.contains("flink.job.autoStart=true"));
         Assert.assertTrue(pom.contains("<artifactId>demo-job</artifactId>"));
         Assert.assertTrue(pom.contains("<artifactId>flare-flink</artifactId>"));
+        Assert.assertTrue(runScript.contains("com.example.DemoJob"));
+        Assert.assertTrue(runScript.contains("target/demo-job-*-all.jar"));
+        Assert.assertTrue(submitScript.contains("flink run -c com.example.DemoJob"));
         Assert.assertTrue(readme.contains("mvn -DskipTests clean package"));
+        Assert.assertTrue(readme.contains("./run-local.sh"));
+        Assert.assertTrue(readme.contains("./submit.sh"));
     }
 
     @Test

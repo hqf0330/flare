@@ -21,6 +21,8 @@ FLARE_SKIP_BUILD=1 ./scripts/flare-starter.sh \
 test -f "${STARTER_OUT}/src/main/java/com/example/SmokeJob.java"
 test -f "${STARTER_OUT}/src/main/resources/flink-streaming.properties"
 test -f "${STARTER_OUT}/pom.xml"
+test -f "${STARTER_OUT}/run-local.sh"
+test -f "${STARTER_OUT}/submit.sh"
 test -f "${STARTER_OUT}/README-run.md"
 
 echo "[verify] doctor should pass for valid smoke job"

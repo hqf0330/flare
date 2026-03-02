@@ -4,6 +4,7 @@ import com.bhcode.flare.flink.doctor.rules.AutoStartGuardrailRule;
 import com.bhcode.flare.flink.doctor.rules.CheckpointGuardrailRule;
 import com.bhcode.flare.flink.doctor.rules.ConnectorAnnotationKeyRule;
 import com.bhcode.flare.flink.doctor.rules.DoctorRule;
+import com.bhcode.flare.flink.doctor.rules.JobClassGuardrailRule;
 import com.bhcode.flare.flink.doctor.rules.JdbcRequiredConfigRule;
 import com.bhcode.flare.flink.doctor.rules.KafkaRequiredConfigRule;
 import com.bhcode.flare.flink.doctor.rules.ParallelismGuardrailRule;
@@ -75,6 +76,7 @@ public final class DoctorCli {
     private static List<DoctorRule> defaultRules() {
         return List.of(
                 new StreamingAnnotationRule(),
+                new JobClassGuardrailRule(),
                 new ConnectorAnnotationKeyRule(),
                 new KafkaRequiredConfigRule(),
                 new JdbcRequiredConfigRule(),

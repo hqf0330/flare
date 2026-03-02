@@ -4,8 +4,11 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public final class StarterCli {
 
@@ -76,6 +79,7 @@ public final class StarterCli {
             writePropertiesFile(outRoot, placeholders, renderer);
             writePomFile(outRoot, placeholders, renderer);
             writeReadme(outRoot, cliArgs.template, cliArgs.jobName, packageName, artifactId);
+            writeScriptFiles(outRoot, placeholders, renderer);
             out.println("Starter files generated at: " + outRoot.toAbsolutePath());
             return 0;
         } catch (IllegalArgumentException e) {
@@ -136,12 +140,50 @@ public final class StarterCli {
                 1. Keep `flink-streaming.properties` aligned with your env.
                 2. Package:
                    `mvn -DskipTests clean package`
-                3. Submit:
+                3. Local run:
+                   `./run-local.sh`
+                4. Submit:
                    `flink run -c %s.%s target/%s-*-all.jar`
+                   or `./submit.sh`
                 """.formatted(template, packageName, jobName, packageName, jobName, artifactId);
         Path readmeFile = outRoot.resolve("README-run.md");
         Files.createDirectories(readmeFile.getParent());
         Files.writeString(readmeFile, readme, StandardCharsets.UTF_8);
+    }
+
+    private static void writeScriptFiles(Path outRoot,
+                                         Map<String, String> placeholders,
+                                         TemplateRenderer renderer) throws Exception {
+        writeScript(outRoot, "run-local.sh", "/starter/templates/common/run-local.sh.tpl", placeholders, renderer);
+        writeScript(outRoot, "submit.sh", "/starter/templates/common/submit.sh.tpl", placeholders, renderer);
+    }
+
+    private static void writeScript(Path outRoot,
+                                    String filename,
+                                    String templatePath,
+                                    Map<String, String> placeholders,
+                                    TemplateRenderer renderer) throws Exception {
+        String content = renderer.renderClasspathTemplate(templatePath, placeholders);
+        Path scriptFile = outRoot.resolve(filename);
+        Files.createDirectories(scriptFile.getParent());
+        Files.writeString(scriptFile, content, StandardCharsets.UTF_8);
+        setExecutableIfSupported(scriptFile);
+    }
+
+    private static void setExecutableIfSupported(Path path) {
+        try {
+            Set<PosixFilePermission> permissions = new HashSet<>();
+            permissions.add(PosixFilePermission.OWNER_READ);
+            permissions.add(PosixFilePermission.OWNER_WRITE);
+            permissions.add(PosixFilePermission.OWNER_EXECUTE);
+            permissions.add(PosixFilePermission.GROUP_READ);
+            permissions.add(PosixFilePermission.GROUP_EXECUTE);
+            permissions.add(PosixFilePermission.OTHERS_READ);
+            permissions.add(PosixFilePermission.OTHERS_EXECUTE);
+            Files.setPosixFilePermissions(path, permissions);
+        } catch (Exception ignored) {
+            // Non-POSIX filesystem (e.g. Windows) can ignore executable permission setup.
+        }
     }
 
     private static boolean isSupportedTemplate(String template) {
