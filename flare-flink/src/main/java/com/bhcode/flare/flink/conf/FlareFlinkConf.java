@@ -1,7 +1,6 @@
 package com.bhcode.flare.flink.conf;
 
 import com.bhcode.flare.common.util.PropUtils;
-import org.apache.commons.lang3.StringUtils;
 
 public class FlareFlinkConf {
 
@@ -37,6 +36,13 @@ public class FlareFlinkConf {
     public static final String OPERATOR_CHAINING_ENABLE = "flink.env.operatorChaining.enable";
     public static final String FLINK_TABLE_ENV_ENABLE = "flink.table.env.enable";
     public static final String FLINK_DIRTY_DATA_PRINT_ENABLE = "flare.dirty.data.print.enable";
+    public static final String FLARE_RUNTIME_REST_ENABLE = "flare.runtime.rest.enable";
+    public static final String FLARE_RUNTIME_REST_HOST = "flare.runtime.rest.host";
+    public static final String FLARE_RUNTIME_REST_PORT = "flare.runtime.rest.port";
+    public static final String FLARE_RUNTIME_REST_TOKEN = "flare.runtime.rest.token";
+    public static final String FLARE_RUNTIME_REST_URL = "flare.runtime.rest.url";
+    public static final String FLARE_RUNTIME_SCHEDULE_ENABLE = "flare.runtime.schedule.enable";
+    public static final String FLARE_RUNTIME_SCHEDULE_POOL_SIZE = "flare.runtime.schedule.pool.size";
 
     // ========== Checkpoint 相关配置 ==========
     public static final String FLINK_STREAM_CHECKPOINT_INTERVAL = "flink.stream.checkpoint.interval";
@@ -223,6 +229,31 @@ public class FlareFlinkConf {
 
     public static boolean isDirtyDataPrintEnable() {
         return PropUtils.getBoolean(FLINK_DIRTY_DATA_PRINT_ENABLE, false);
+    }
+
+    public static boolean isRuntimeRestEnable() {
+        return PropUtils.getBoolean(FLARE_RUNTIME_REST_ENABLE, false);
+    }
+
+    public static String getRuntimeRestHost() {
+        return PropUtils.getString(FLARE_RUNTIME_REST_HOST, "0.0.0.0");
+    }
+
+    public static int getRuntimeRestPort() {
+        return PropUtils.getInt(FLARE_RUNTIME_REST_PORT, 0);
+    }
+
+    public static String getRuntimeRestToken() {
+        return PropUtils.getString(FLARE_RUNTIME_REST_TOKEN, "");
+    }
+
+    public static boolean isRuntimeScheduleEnable() {
+        return PropUtils.getBoolean(FLARE_RUNTIME_SCHEDULE_ENABLE, true);
+    }
+
+    public static int getRuntimeSchedulePoolSize() {
+        int size = PropUtils.getInt(FLARE_RUNTIME_SCHEDULE_POOL_SIZE, 1);
+        return Math.max(1, size);
     }
 
     private FlareFlinkConf() {

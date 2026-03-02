@@ -159,11 +159,23 @@ public abstract class BaseFlink extends BaseFlare {
      */
     @Override
     protected final void shutdown(boolean stopGracefully, boolean inListener) {
+        try {
+            this.releaseRuntimeResources();
+        } catch (Exception e) {
+            log.warn("Failed to release runtime resources during shutdown", e);
+        }
         super.shutdown(stopGracefully, inListener);
         // TODO: 如果配置了退出，则退出JVM
         // if (FlareFrameworkConf.shutdownExit) {
         //     FlareUtils.exitError();
         // }
+    }
+
+    /**
+     * 释放运行时资源（由子类按需实现）
+     */
+    protected void releaseRuntimeResources() {
+        // no-op
     }
 
     /**

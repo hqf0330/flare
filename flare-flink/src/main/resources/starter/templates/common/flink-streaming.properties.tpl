@@ -2,7 +2,7 @@
 # Tune these values for your environment.
 
 flink.appName=${JOB_NAME}
-flink.job.autoStart=true
+flink.job.auto.start=true
 flink.default.parallelism=1
 flink.stream.checkpoint.interval=10000
 

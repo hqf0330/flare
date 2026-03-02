@@ -20,6 +20,9 @@ public class StarterCliTest {
         Assert.assertTrue(Files.exists(out.resolve("src/main/java/com/example/DemoJob.java")));
         Assert.assertTrue(Files.exists(out.resolve("src/main/resources/flink-streaming.properties")));
         Assert.assertTrue(Files.exists(out.resolve("README-run.md")));
+        String conf = Files.readString(out.resolve("src/main/resources/flink-streaming.properties"));
+        Assert.assertTrue(conf.contains("flink.job.auto.start=true"));
+        Assert.assertFalse(conf.contains("flink.job.autoStart=true"));
     }
 
     @Test

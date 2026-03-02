@@ -114,6 +114,54 @@ public class MyJob extends FlinkStreaming {
 bash scripts/verify-golden-path.sh
 ```
 
+## 🔧 Runtime 治理（可选）
+
+REST 控制默认关闭；内部调度默认开启（仅在存在 `@Scheduled` 方法时生效）：
+
+```properties
+flare.runtime.rest.enable=true
+flare.runtime.rest.host=0.0.0.0
+flare.runtime.rest.port=0
+flare.runtime.rest.token=
+
+flare.runtime.schedule.enable=true
+flare.runtime.schedule.pool.size=1
+```
+
+端点：
+* `POST /system/kill`：触发任务停止
+* `POST /system/setConf`：动态更新 `key=value` 配置
+* `POST /system/checkpoint`：更新 checkpoint 参数（并尝试热应用）
+* `GET /system/datasource`：查询结构化数据源/链路快照
+* `GET /system/exception`：查询并按参数清理异常总线（`clear`,`limit`）
+* `GET /system/config`：查询当前生效配置快照
+* `GET /system/metrics`：查询框架内累计指标快照
+* `GET /system/lineage`：查询结构化 lineage 快照（source/target/operation/count）
+* `GET /system/distributeSync`：查询最近一次分布式配置同步快照（module/payload/version/timestamp）
+* `POST /system/collectLineage`：上报并合并外部 lineage 边（JSON 数组）
+
+示例：
+```bash
+curl -X POST http://127.0.0.1:<port>/system/setConf \
+  -H "Content-Type: application/json" \
+  -d '{"flink.default.parallelism":"4"}'
+
+curl -X POST http://127.0.0.1:<port>/system/collectLineage \
+  -H "Content-Type: application/json" \
+  -d '[{"source":"Kafka:orders","target":"Flink","operation":"SOURCE","count":3}]'
+```
+
+内部调度（轻量，无 cron）：
+
+```java
+import com.bhcode.flare.common.anno.Scheduled;
+
+@Scheduled(fixedInterval = 60000, initialDelay = 10000)
+public void refreshLocalCache() {
+    // 非业务链路的周期任务（如缓存刷新、心跳上报）
+}
+```
+
 ---
 
 ## 📂 项目结构

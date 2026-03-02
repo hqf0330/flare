@@ -8,6 +8,7 @@ import com.bhcode.flare.flink.doctor.rules.JdbcRequiredConfigRule;
 import com.bhcode.flare.flink.doctor.rules.KafkaRequiredConfigRule;
 import com.bhcode.flare.flink.doctor.rules.ParallelismGuardrailRule;
 import com.bhcode.flare.flink.doctor.rules.RedisRequiredConfigRule;
+import com.bhcode.flare.flink.doctor.rules.RuntimeGovernanceGuardrailRule;
 import com.bhcode.flare.flink.doctor.rules.StreamingAnnotationRule;
 
 import java.io.PrintStream;
@@ -80,7 +81,8 @@ public final class DoctorCli {
                 new RedisRequiredConfigRule(),
                 new CheckpointGuardrailRule(),
                 new ParallelismGuardrailRule(),
-                new AutoStartGuardrailRule()
+                new AutoStartGuardrailRule(),
+                new RuntimeGovernanceGuardrailRule()
         );
     }
 

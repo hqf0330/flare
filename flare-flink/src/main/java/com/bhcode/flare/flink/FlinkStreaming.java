@@ -17,6 +17,11 @@ import com.bhcode.flare.flink.functions.AsyncResult;
 import com.bhcode.flare.flink.functions.LambdaAsyncJdbcLookupFunction;
 import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction;
 import com.bhcode.flare.flink.functions.LambdaAsyncRedisLookupFunction.RedisLookupLogic;
+import com.bhcode.flare.flink.runtime.control.ReflectionRuntimeCheckpointUpdater;
+import com.bhcode.flare.flink.runtime.control.RuntimeControlRestServer;
+import com.bhcode.flare.flink.runtime.control.RuntimeControlService;
+import com.bhcode.flare.flink.runtime.control.RuntimeControlServiceImpl;
+import com.bhcode.flare.flink.runtime.schedule.RuntimeTaskScheduler;
 import com.bhcode.flare.flink.util.FlinkSingletonFactory;
 import com.bhcode.flare.flink.util.FlinkUtils;
 import lombok.Getter;
@@ -77,6 +82,10 @@ public abstract class FlinkStreaming extends BaseFlink {
     // 全局脏数据流收集器（D 计划：脏数据管理）
     private final List<DataStream<String>> dirtyDataStreams = new ArrayList<>();
 
+    // 运行时治理 REST 服务（可选）
+    private transient RuntimeControlRestServer runtimeControlRestServer;
+    private transient RuntimeTaskScheduler runtimeTaskScheduler;
+
     // 用于存放延期的数据
     // TODO: 如果需要使用，可以创建：new OutputTag<Type>("later_data")
 
@@ -113,11 +122,6 @@ public abstract class FlinkStreaming extends BaseFlink {
      */
     @Override
     protected void createContext(Object conf) {
-        // TODO: 启动 REST 服务（如果启用）
-        // if (FlinkUtils.isYarnApplicationMode() || FlareUtils.isLocalRunMode()) {
-        //     this.restfulRegister.startRestServer();
-        // }
-
         Configuration finalConf = this.buildConf((Configuration) conf);
 
         // 创建 StreamExecutionEnvironment
@@ -128,6 +132,16 @@ public abstract class FlinkStreaming extends BaseFlink {
         } else {
             this.env = StreamExecutionEnvironment.getExecutionEnvironment();
             log.info("Running in cluster mode");
+        }
+
+        // 运行时治理 REST 服务（默认关闭，仅在 local / yarn-application 模式启用）
+        if (FlareFlinkConf.isRuntimeRestEnable()) {
+            if (FlinkUtils.isYarnApplicationMode() || FlareUtils.isLocalRunMode()) {
+                this.startRuntimeControlRestServer();
+            } else {
+                log.info("Runtime control REST is enabled but current deploy mode '{}' is unsupported",
+                        FlinkUtils.getDeployMode());
+            }
         }
 
         // 解析并应用 @Streaming 注解配置
@@ -245,6 +259,7 @@ public abstract class FlinkStreaming extends BaseFlink {
         FlinkConnectors.applyConnectorAnnotations(this.getClass());
         super.init(conf, args);
         this.processAll();
+        this.startRuntimeTaskScheduler();
 
         // 自动启动任务（可通过配置关闭）
         if (FlareFlinkConf.isJobAutoStart()) {
@@ -841,6 +856,103 @@ public abstract class FlinkStreaming extends BaseFlink {
         }
 
         log.info("@Streaming annotation configuration applied successfully");
+    }
+
+    @Override
+    protected void releaseRuntimeResources() {
+        this.closeRuntimeTaskScheduler();
+        this.closeRuntimeControlRestServer();
+    }
+
+    /**
+     * 返回需要扫描 @Scheduled 方法的实例集合。
+     * 子类可覆盖该方法，将内部运维组件一并纳入调度。
+     */
+    protected List<Object> scheduledTaskOwners() {
+        return List.of(this);
+    }
+
+    private void startRuntimeControlRestServer() {
+        if (this.runtimeControlRestServer != null) {
+            return;
+        }
+        RuntimeControlService service = new RuntimeControlServiceImpl(
+                () -> {
+                    Thread killer = new Thread(this::stop, "flare-runtime-kill");
+                    killer.setDaemon(true);
+                    killer.start();
+                },
+                new ReflectionRuntimeCheckpointUpdater()
+        );
+        RuntimeControlRestServer.Config config = new RuntimeControlRestServer.Config(
+                FlareFlinkConf.getRuntimeRestHost(),
+                FlareFlinkConf.getRuntimeRestPort(),
+                FlareFlinkConf.getRuntimeRestToken()
+        );
+        try {
+            this.runtimeControlRestServer = new RuntimeControlRestServer(config, service);
+            this.runtimeControlRestServer.start();
+            PropUtils.setProperty(FlareFlinkConf.FLARE_RUNTIME_REST_URL, this.runtimeControlRestServer.baseUrl());
+            log.info("Runtime control REST endpoint started: {}", this.runtimeControlRestServer.baseUrl());
+        } catch (Exception e) {
+            this.runtimeControlRestServer = null;
+            throw new IllegalStateException("Failed to start runtime control REST server", e);
+        }
+    }
+
+    private void closeRuntimeControlRestServer() {
+        if (this.runtimeControlRestServer == null) {
+            return;
+        }
+        try {
+            this.runtimeControlRestServer.close();
+        } catch (Exception e) {
+            log.warn("Failed to close runtime control REST server", e);
+        } finally {
+            this.runtimeControlRestServer = null;
+        }
+    }
+
+    private void startRuntimeTaskScheduler() {
+        if (!FlareFlinkConf.isRuntimeScheduleEnable()) {
+            log.info("Runtime scheduler is disabled by config: {}", FlareFlinkConf.FLARE_RUNTIME_SCHEDULE_ENABLE);
+            return;
+        }
+        if (this.runtimeTaskScheduler != null) {
+            return;
+        }
+
+        List<Object> owners = this.scheduledTaskOwners();
+        if (owners == null || owners.isEmpty()) {
+            return;
+        }
+
+        RuntimeTaskScheduler scheduler = new RuntimeTaskScheduler(
+                FlareFlinkConf.getRuntimeSchedulePoolSize(),
+                "flare-schedule-"
+        );
+        int registered = scheduler.register(owners.toArray());
+        if (registered <= 0) {
+            scheduler.close();
+            return;
+        }
+        this.runtimeTaskScheduler = scheduler;
+        log.info("Runtime scheduler started with {} task(s), poolSize={}",
+                registered,
+                FlareFlinkConf.getRuntimeSchedulePoolSize());
+    }
+
+    private void closeRuntimeTaskScheduler() {
+        if (this.runtimeTaskScheduler == null) {
+            return;
+        }
+        try {
+            this.runtimeTaskScheduler.close();
+        } catch (Exception e) {
+            log.warn("Failed to close runtime scheduler", e);
+        } finally {
+            this.runtimeTaskScheduler = null;
+        }
     }
 
 }

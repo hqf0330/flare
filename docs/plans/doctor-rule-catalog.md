@@ -25,6 +25,9 @@
 | `DR-301` | Checkpoint disabled/invalid | `@Streaming.interval/value <= 0` | 设置 `interval>0` 或 `value>0` |
 | `DR-311` | Parallelism invalid | `@Streaming.parallelism <= 0` | 设置 `parallelism>0` |
 | `DR-321` | Auto start disabled | `@Streaming.autoStart=false` | 保持自动启动或补充手动执行说明 |
+| `DR-331` | Deprecated autoStart key | `@Config` 中存在 `flink.job.autoStart` | 改为 `flink.job.auto.start` |
+| `DR-332` | Runtime REST no token | `flare.runtime.rest.enable=true` 但 token 为空 | 配置 `flare.runtime.rest.token` |
+| `DR-333` | Runtime scheduler pool invalid | `flare.runtime.schedule.pool.size <= 0` | 设为正整数 |
 
 ## Exit Code Contract
 
