@@ -851,7 +851,7 @@ public abstract class FlinkStreaming extends BaseFlink {
 
         // 设置 watermark 间隔
         if (streaming.watermarkInterval() > 0) {
-            // TODO: 设置 watermark 间隔
+            this.env.getConfig().setAutoWatermarkInterval(streaming.watermarkInterval());
             log.debug("Watermark interval: {}ms", streaming.watermarkInterval());
         }
 
